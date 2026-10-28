@@ -5337,12 +5337,18 @@ async function gdInit(){
   document.getElementById('gdLogout').onclick=()=>{ localStorage.removeItem('gd-auth'); localStorage.removeItem('gd-first'); gdSet('Abgemeldet.'); };
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gdScheduleSync(1500); });
   document.addEventListener('pointerdown',()=>{ if(!gdWantAuth||!gdCid()) return; gdWantAuth=false; gdRequestToken('').then(()=>{ gdSet(''); gdScheduleSync(500); }).catch(e=>gdSet(e.message)); },true);
+  // regelmäßiger Abgleich (alle 5 Minuten), solange die App sichtbar und angemeldet ist
+  setInterval(()=>{
+    if(document.hidden||!gdAuth()||!gdCid()) return;
+    const a=gdAuth(); if(Date.now()>=a.exp-60000){ gdWantAuth=true; gdRender(); return; } // abgelaufen: nächstes Tippen erneuert
+    gdSync(false);
+  }, 5*60*1000);
   gdRender(); gdScheduleSync(1500);
 }
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=6, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=7, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
