@@ -924,16 +924,16 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         <div class="storage-note" id="verInfo"></div>
         <div class="export-row"><button class="btn" id="verReload">Neu laden (Zwischenspeicher leeren)</button></div>
       </div>
-      <div class="settings-block" id="settingsOneDrive">
-        <h4>OneDrive-Sync (PC ⇄ Handy)</h4>
-        <div class="hint">Gleicht Aufgaben, Notizen und Bilder über einen eigenen App-Ordner in deinem privaten OneDrive ab. Dafür einmalig bei Microsoft eine App registrieren und die Anwendungs-(Client-)ID hier eintragen. Umleitungs-URI (SPA): <b id="odRedirect"></b></div>
+      <div class="settings-block" id="settingsDrive">
+        <h4>Google-Drive-Sync (PC ⇄ Handy)</h4>
+        <div class="hint">Gleicht Aufgaben, Notizen und Bilder über einen versteckten App-Ordner in deinem Google Drive ab (die App sieht keine anderen Dateien). Einmalig in der Google Cloud Console eine Client-ID erstellen und hier eintragen. Autorisierte JavaScript-Quelle: <b id="gdOrigin"></b></div>
         <div class="export-row">
-          <input type="text" id="odClientId" placeholder="Anwendungs-(Client-)ID" style="min-width:290px;">
-          <button class="btn primary" id="odLogin">Mit Microsoft anmelden</button>
-          <button class="btn" id="odSyncNow">Jetzt synchronisieren</button>
-          <button class="btn" id="odLogout">Abmelden</button>
+          <input type="text" id="gdClientId" placeholder="Client-ID (…apps.googleusercontent.com)" style="min-width:290px;">
+          <button class="btn primary" id="gdLogin">Mit Google anmelden</button>
+          <button class="btn" id="gdSyncNow">Jetzt synchronisieren</button>
+          <button class="btn" id="gdLogout">Abmelden</button>
         </div>
-        <div class="storage-note" id="odStatus"></div>
+        <div class="storage-note" id="gdStatus"></div>
       </div>
       <div class="settings-block" id="settingsDataFile">
         <h4>Datendatei (JSON) – dauerhafte Speicherung</h4>
@@ -1450,7 +1450,7 @@ const store = {
     // Zusätzlich (höchstens stündlich) als Datei in den gewählten Sicherungsordner.
     writeFolderBackup(false).catch(()=>{});
   try{ scheduleDataFileWrite(); }catch(e){}
-  try{ odScheduleSync(); }catch(e){}
+  try{ gdScheduleSync(); }catch(e){}
   }
 };
 
@@ -5229,60 +5229,13 @@ document.getElementById('nbSearch').addEventListener('input', async e=>{ await n
 document.getElementById('nbShowDone').addEventListener('change', async e=>{ await nbFinish(true); nbShowDone = e.target.checked; renderNotebook(); });
 
 
-// --- OneDrive-Sync (OAuth2 Code+PKCE gegen Microsoft Graph, App-Ordner; Abgleich pro Aufgabe/Bereich nach Zeitstempel) ---
-const OD_AUTH='https://login.microsoftonline.com/consumers/oauth2/v2.0/', OD_SCOPE='Files.ReadWrite.AppFolder offline_access';
-let odBusy=false, odApplying=false, odTimer=null, odMsg='';
-const odRedirect=()=>location.origin+location.pathname, odCid=()=>localStorage.getItem('od-cid')||'';
-const odAuth=()=>{ try{ return JSON.parse(localStorage.getItem('od-auth')||'null'); }catch(e){ return null; } };
+// --- Google-Drive-Sync (Google Identity Services Token, App-Ordner "appDataFolder"; Abgleich pro Aufgabe/Bereich nach Zeitstempel) ---
+const GD_SCOPE='https://www.googleapis.com/auth/drive.appdata', GD_API='https://www.googleapis.com/drive/v3/files', GD_UP='https://www.googleapis.com/upload/drive/v3/files';
+let gdBusy=false, gdApplying=false, gdTimer=null, gdMsg='', gdWantAuth=false;
+const gdCid=()=>localStorage.getItem('gd-cid')||'';
+const gdAuth=()=>{ try{ return JSON.parse(localStorage.getItem('gd-auth')||'null'); }catch(e){ return null; } };
 const odNorm=o=>{ const c=Object.assign({},o); delete c.savedAt; return JSON.stringify(c); };
-const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-function odSet(m){ odMsg=m||''; odRender(); }
-function odRender(){
-  const el=document.getElementById('odStatus'); if(!el) return;
-  const a=odAuth(), last=Number(localStorage.getItem('od-last')||0);
-  document.getElementById('odRedirect').textContent=odRedirect();
-  el.textContent=(a?'Angemeldet. ':'Nicht angemeldet. ')+(last?'Letzter Abgleich: '+fmtDateTime(last)+'. ':'')+odMsg;
-}
-async function odLogin(){
-  const cid=document.getElementById('odClientId').value.trim(); if(!cid){ alert('Bitte zuerst die Client-ID eintragen.'); return; }
-  localStorage.setItem('od-cid',cid);
-  const v=b64u(crypto.getRandomValues(new Uint8Array(48))), st=b64u(crypto.getRandomValues(new Uint8Array(12)));
-  const ch=b64u(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)));
-  sessionStorage.setItem('od-pkce',JSON.stringify({v,st}));
-  location.href=OD_AUTH+'authorize?'+new URLSearchParams({client_id:cid,response_type:'code',redirect_uri:odRedirect(),response_mode:'query',scope:OD_SCOPE,code_challenge:ch,code_challenge_method:'S256',state:st,prompt:'select_account'});
-}
-async function odTokenReq(params){
-  const r=await fetch(OD_AUTH+'token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(Object.assign({client_id:odCid(),scope:OD_SCOPE},params))});
-  const j=await r.json(); if(!r.ok) throw new Error(j.error_description||j.error||'Anmeldung fehlgeschlagen');
-  localStorage.setItem('od-auth',JSON.stringify({at:j.access_token,rt:j.refresh_token||(odAuth()||{}).rt,exp:Date.now()+j.expires_in*1000}));
-}
-async function odToken(){
-  const a=odAuth(); if(!a) throw new Error('Nicht angemeldet.');
-  if(Date.now()<a.exp-60000) return a.at;
-  try{ await odTokenReq({grant_type:'refresh_token',refresh_token:a.rt}); }catch(e){ localStorage.removeItem('od-auth'); throw new Error('Anmeldung abgelaufen – bitte erneut anmelden.'); }
-  return odAuth().at;
-}
-async function odHandleRedirect(){
-  const q=new URLSearchParams(location.search); if(!q.get('code')&&!q.get('error')) return;
-  const pk=JSON.parse(sessionStorage.getItem('od-pkce')||'null'); history.replaceState(null,'',location.pathname);
-  if(q.get('error')){ odSet('Anmeldung abgebrochen: '+(q.get('error_description')||q.get('error'))); return; }
-  if(!pk||pk.st!==q.get('state')) return;
-  try{ await odTokenReq({grant_type:'authorization_code',code:q.get('code'),redirect_uri:odRedirect(),code_verifier:pk.v}); sessionStorage.removeItem('od-pkce'); }catch(e){ odSet(e.message); }
-}
-async function odFetch(path,opt){
-  const t=await odToken(), url=path.startsWith('http')?path:'https://graph.microsoft.com/v1.0/me/drive/special/approot'+path;
-  return fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},(opt||{}).headers||{})}));
-}
 function odMime(u8){ if(u8[0]===0xFF&&u8[1]===0xD8) return 'image/jpeg'; if(u8[0]===0x89&&u8[1]===0x50) return 'image/png'; if(u8[0]===0x47&&u8[1]===0x49) return 'image/gif'; if(u8[0]===0x52&&u8[1]===0x49) return 'image/webp'; return 'application/octet-stream'; }
-async function odGet(rel){
-  const r=await odFetch(':/'+rel); if(r.status===404) return null; if(!r.ok) throw new Error('OneDrive '+r.status);
-  const m=await r.json(), d=await fetch(m['@microsoft.graph.downloadUrl']); if(!d.ok) throw new Error('Download '+d.status);
-  return {buf:await d.arrayBuffer(), etag:m.eTag};
-}
-async function odPut(rel,blob,etag){
-  const r=await odFetch(':/'+rel+':/content',{method:'PUT',body:blob,headers:Object.assign({'Content-Type':blob.type||'application/octet-stream'},etag?{'If-Match':etag}:{})});
-  if(!r.ok){ const e=new Error('Hochladen '+r.status); e.code=r.status; throw e; }
-}
 function odMerge(L,lm,C,cm){
   const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={upd:{},hash:{},del:{}};
   for(const k of ['tasks','areas','recurring']){
@@ -5295,57 +5248,101 @@ function odMerge(L,lm,C,cm){
   }
   return {merged:out,meta};
 }
-async function odSync(manual,retry){
-  if(odBusy||!odAuth()) return;
-  if(typeof nbEditing!=='undefined'&&nbEditing){ odScheduleSync(6000); return; }
-  odBusy=true; odSet('Synchronisiere …');
+function gdSet(m){ gdMsg=m||''; gdRender(); }
+function gdRender(){
+  const el=document.getElementById('gdStatus'); if(!el) return;
+  const a=gdAuth(), last=Number(localStorage.getItem('gd-last')||0), ok=a&&Date.now()<a.exp-60000;
+  document.getElementById('gdOrigin').textContent=location.origin;
+  el.textContent=(a?(ok?'Angemeldet. ':'Angemeldet, Anmeldung muss erneuert werden (einmal irgendwo tippen). '):'Nicht angemeldet. ')+(last?'Letzter Abgleich: '+fmtDateTime(last)+'. ':'')+gdMsg;
+}
+function gdLoadGis(){ return new Promise((res,rej)=>{
+  if(window.google&&google.accounts&&google.accounts.oauth2) return res();
+  const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.onload=res; sc.onerror=()=>rej(new Error('Google-Anmeldung nicht erreichbar (offline?)')); document.head.appendChild(sc); }); }
+async function gdRequestToken(prompt){
+  await gdLoadGis();
+  return new Promise((res,rej)=>{
+    const tc=google.accounts.oauth2.initTokenClient({client_id:gdCid(),scope:GD_SCOPE,
+      callback:r=>{ if(r.error) return rej(new Error(r.error_description||r.error));
+        localStorage.setItem('gd-auth',JSON.stringify({at:r.access_token,exp:Date.now()+Number(r.expires_in)*1000})); res(r.access_token); },
+      error_callback:e=>rej(new Error('Anmeldung nicht möglich ('+((e&&(e.type||e.message))||'abgebrochen')+')'))});
+    tc.requestAccessToken({prompt});
+  });
+}
+async function gdLogin(){
+  const cid=document.getElementById('gdClientId').value.trim(); if(!cid){ alert('Bitte zuerst die Client-ID eintragen.'); return; }
+  localStorage.setItem('gd-cid',cid);
+  try{ await gdRequestToken('select_account'); gdSet(''); gdScheduleSync(500); }catch(e){ gdSet(e.message); }
+}
+async function gdToken(){
+  const a=gdAuth(); if(a&&Date.now()<a.exp-60000) return a.at;
+  gdWantAuth=true; throw new Error('Anmeldung abgelaufen – bitte einmal irgendwo tippen (oder „Mit Google anmelden").');
+}
+async function gdFetch(url,opt){ const t=await gdToken(); return fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},(opt||{}).headers||{})})); }
+async function gdOk(r){ if(r.ok) return r; const e=new Error('Google Drive '+r.status); e.code=r.status; if(r.status===401){ localStorage.setItem('gd-auth',JSON.stringify({at:'',exp:0})); gdWantAuth=true; } throw e; }
+async function gdList(){
+  const m=new Map(); let tok='';
+  do{ const r=await gdOk(await gdFetch(GD_API+'?spaces=appDataFolder&pageSize=1000&fields=nextPageToken,files(id,name,version)'+(tok?'&pageToken='+encodeURIComponent(tok):''))); const j=await r.json(); (j.files||[]).forEach(f=>m.set(f.name,f)); tok=j.nextPageToken||''; }while(tok);
+  return m;
+}
+async function gdGet(f){ return (await gdOk(await gdFetch(GD_API+'/'+f.id+'?alt=media'))).arrayBuffer(); }
+async function gdPut(name,blob,ex){
+  const type=blob.type||'application/octet-stream';
+  if(ex) return gdOk(await gdFetch(GD_UP+'/'+ex.id+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':type},body:blob}));
+  const bd='gdb'+Date.now(), body=new Blob(['--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name,parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: '+type+'\r\n\r\n',blob,'\r\n--'+bd+'--']);
+  return gdOk(await gdFetch(GD_UP+'?uploadType=multipart',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body}));
+}
+async function gdSync(manual,retry){
+  if(gdBusy||!gdAuth()) return;
+  if(typeof nbEditing!=='undefined'&&nbEditing){ gdScheduleSync(6000); return; }
+  gdBusy=true; gdSet('Synchronisiere …');
   try{
     await saveAll();
     const L=JSON.parse(await externalizeJson(JSON.stringify(state))), lm=JSON.parse(JSON.stringify(syncMeta||{upd:{},hash:{},del:{}}));
-    const cf=await odGet('daten.json'); let C=null,cm=null,merged,meta;
-    if(cf){ const o=JSON.parse(new TextDecoder().decode(cf.buf)); C=o.state; cm=o.meta; }
+    const files=await gdList(), cf=files.get('daten.json'); let C=null,cm=null,merged,meta;
+    if(cf){ const o=JSON.parse(new TextDecoder().decode(await gdGet(cf))); C=o.state; cm=o.meta; }
     if(!C){ merged=L; meta=lm; }
-    else if(!localStorage.getItem('od-first')){
-      if(!confirm('In OneDrive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den OneDrive-Stand ersetzen?\n\nOK = OneDrive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
+    else if(!localStorage.getItem('gd-first')){
+      if(!confirm('In Google Drive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den Google-Drive-Stand ersetzen?\n\nOK = Google Drive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
       await writeBackupSnapshot(JSON.stringify(state),true); merged=C; meta=cm;
     } else ({merged,meta}=odMerge(L,lm,C,cm));
-    const ids=[...new Set([...JSON.stringify(merged).matchAll(TOK_RE)].map(m=>m[1]))], have=new Set();
-    let url=':/images:/children?$select=name&$top=999';
-    while(url){ const r=await odFetch(url); if(!r.ok) break; const j=await r.json(); (j.value||[]).forEach(f=>have.add(f.name)); url=j['@odata.nextLink']||null; }
+    const ids=[...new Set([...JSON.stringify(merged).matchAll(TOK_RE)].map(m=>m[1]))];
     for(const id of ids){
-      const loc=await idbGet(IDB_IMG_STORE,id);
-      if(loc&&!have.has(id)) await odPut('images/'+id,loc);
-      else if(!loc&&have.has(id)){ const f=await odGet('images/'+id); if(f){ await idbPut(IDB_IMG_STORE,new Blob([f.buf],{type:odMime(new Uint8Array(f.buf,0,4))}),id); knownImgs.add(id); } }
+      const loc=await idbGet(IDB_IMG_STORE,id), ex=files.get('img_'+id);
+      if(loc&&!ex) await gdPut('img_'+id,loc);
+      else if(!loc&&ex){ const buf=await gdGet(ex); await idbPut(IDB_IMG_STORE,new Blob([buf],{type:odMime(new Uint8Array(buf,0,4))}),id); knownImgs.add(id); }
     }
     if(odNorm(merged)!==odNorm(L)){
-      odApplying=true;
+      gdApplying=true;
       try{
         state=Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]},JSON.parse(await inflateJson(JSON.stringify(merged))));
         migrateState(); reconcileRunningTimers(); applyTheme(); syncMeta=meta; await idbPut(IDB_STATE_STORE,JSON.stringify(meta),'syncmeta'); await saveAll(); renderAll();
-      } finally { odApplying=false; }
+      } finally { gdApplying=false; }
     }
-    if(!C||JSON.stringify([odNorm(merged),meta.upd,meta.del])!==JSON.stringify([odNorm(C),cm.upd,cm.del]))
-      await odPut('daten.json',new Blob([JSON.stringify({v:1,savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf&&cf.etag);
-    localStorage.setItem('od-first','1'); localStorage.setItem('od-last',String(Date.now())); odBusy=false; odSet('');
+    if(!C||JSON.stringify([odNorm(merged),meta.upd,meta.del])!==JSON.stringify([odNorm(C),cm.upd,cm.del])){
+      if(cf){ const v=(await (await gdOk(await gdFetch(GD_API+'/'+cf.id+'?fields=version'))).json()).version; if(v!==cf.version){ const e=new Error('Konflikt'); e.code=412; throw e; } }
+      await gdPut('daten.json',new Blob([JSON.stringify({v:1,savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf);
+    }
+    localStorage.setItem('gd-first','1'); localStorage.setItem('gd-last',String(Date.now())); gdBusy=false; gdSet('');
   }catch(e){
-    odBusy=false;
-    if(e.code===412&&!retry) return odSync(manual,true);
-    odSet('Fehler: '+(e.message||e));
+    gdBusy=false;
+    if(e.code===412&&!retry) return gdSync(manual,true);
+    gdSet('Fehler: '+(e.message||e));
   }
 }
-function odScheduleSync(ms){ if(!odAuth()||odApplying) return; clearTimeout(odTimer); odTimer=setTimeout(()=>odSync(false),ms||5000); }
-async function odInit(){
-  const ci=document.getElementById('odClientId'); ci.value=odCid();
-  document.getElementById('odLogin').onclick=odLogin;
-  document.getElementById('odSyncNow').onclick=()=>{ if(!odAuth()){ odSet('Bitte zuerst anmelden.'); return; } odSync(true); };
-  document.getElementById('odLogout').onclick=()=>{ localStorage.removeItem('od-auth'); localStorage.removeItem('od-first'); odSet('Abgemeldet.'); };
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) odScheduleSync(1500); });
-  await odHandleRedirect(); odRender(); odScheduleSync(1500);
+function gdScheduleSync(ms){ if(!gdAuth()||gdApplying) return; clearTimeout(gdTimer); gdTimer=setTimeout(()=>gdSync(false),ms||5000); }
+async function gdInit(){
+  document.getElementById('gdClientId').value=gdCid();
+  document.getElementById('gdLogin').onclick=gdLogin;
+  document.getElementById('gdSyncNow').onclick=()=>{ if(!gdAuth()){ gdSet('Bitte zuerst anmelden.'); return; } gdSync(true); };
+  document.getElementById('gdLogout').onclick=()=>{ localStorage.removeItem('gd-auth'); localStorage.removeItem('gd-first'); gdSet('Abgemeldet.'); };
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gdScheduleSync(1500); });
+  document.addEventListener('pointerdown',()=>{ if(!gdWantAuth||!gdCid()) return; gdWantAuth=false; gdRequestToken('').then(()=>{ gdSet(''); gdScheduleSync(500); }).catch(e=>gdSet(e.message)); },true);
+  gdRender(); gdScheduleSync(1500);
 }
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
-odInit().catch(e=>console.warn('odInit',e));
-const APP_BUILD=5, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+gdInit().catch(e=>console.warn('gdInit',e));
+const APP_BUILD=6, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
