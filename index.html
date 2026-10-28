@@ -919,6 +919,11 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         </div>
         <div id="legacyBody" class="storage-note"></div>
       </div>
+      <div class="settings-block" id="settingsVersion">
+        <h4>App-Version</h4>
+        <div class="storage-note" id="verInfo"></div>
+        <div class="export-row"><button class="btn" id="verReload">Neu laden (Zwischenspeicher leeren)</button></div>
+      </div>
       <div class="settings-block" id="settingsOneDrive">
         <h4>OneDrive-Sync (PC ⇄ Handy)</h4>
         <div class="hint">Gleicht Aufgaben, Notizen und Bilder über einen eigenen App-Ordner in deinem privaten OneDrive ab. Dafür einmalig bei Microsoft eine App registrieren und die Anwendungs-(Client-)ID hier eintragen. Umleitungs-URI (SPA): <b id="odRedirect"></b></div>
@@ -5340,6 +5345,19 @@ async function odInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 odInit().catch(e=>console.warn('odInit',e));
+const APP_BUILD=5, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+async function appVersionInit(){
+  const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
+  b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
+  let cache='kein Cache (Seite nicht installiert/online geöffnet)';
+  try{ const k=(await caches.keys()).filter(x=>x.startsWith('aufgaben-')); if(k.length) cache=k.join(', '); }catch(e){}
+  document.getElementById('verInfo').textContent='Geladen: Build '+APP_BUILD+' vom '+APP_DATE+'. Zwischenspeicher: '+cache+'. Stimmt die Build-Nummer nicht mit der erwarteten überein, unten neu laden.';
+  document.getElementById('verReload').onclick=async()=>{
+    try{ for(const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for(const k of await caches.keys()) await caches.delete(k); }catch(e){}
+    location.reload();
+  };
+}
+appVersionInit();
 applyTheme();
 await initDataFile();
 document.getElementById('loading').style.display='none';
