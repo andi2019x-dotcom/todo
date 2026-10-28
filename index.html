@@ -1291,8 +1291,8 @@ function defaultSettings(){
 }
 // --- IndexedDB: primärer Speicher, localStorage dient als Fallback/Sicherheitsnetz ---
 // Version 2: zusätzlicher Store "handles" für den gemerkten Sicherungsordner (File System Access API).
-const IDB_NAME = 'aufgabenplaner-v2-db', IDB_VERSION = 2;
-const IDB_STATE_STORE = 'state', IDB_BACKUP_STORE = 'backups', IDB_HANDLE_STORE = 'handles';
+const IDB_NAME = 'aufgabenplaner-v2-db', IDB_VERSION = 3;
+const IDB_IMG_STORE = 'images', IDB_STATE_STORE = 'state', IDB_BACKUP_STORE = 'backups', IDB_HANDLE_STORE = 'handles';
 const BACKUP_MIN_INTERVAL_MS = 60*60*1000; // max. 1 automatischer Snapshot pro Stunde
 const BACKUP_MAX_COUNT = 30;
 const LAST_BACKUP_KEY = 'aufgabenplaner-v2-last-backup-at';
@@ -1308,6 +1308,7 @@ function openIDB(){
         const db = req.result;
         if(!db.objectStoreNames.contains(IDB_STATE_STORE)) db.createObjectStore(IDB_STATE_STORE);
         if(!db.objectStoreNames.contains(IDB_BACKUP_STORE)) db.createObjectStore(IDB_BACKUP_STORE, {keyPath:'ts'});
+        if(!db.objectStoreNames.contains(IDB_IMG_STORE)) db.createObjectStore(IDB_IMG_STORE);
         if(!db.objectStoreNames.contains(IDB_HANDLE_STORE)) db.createObjectStore(IDB_HANDLE_STORE);
       };
       // Ist noch ein Tab mit einer älteren Version offen, wartet das Upgrade, bis er geschlossen ist.
@@ -1368,24 +1369,60 @@ async function writeBackupSnapshot(json, force){
   if(!force && now-lastBackupAt < BACKUP_MIN_INTERVAL_MS) return;
   lastBackupAt = now;
   try{ localStorage.setItem(LAST_BACKUP_KEY, String(now)); }catch(e){}
-  await idbPut(IDB_BACKUP_STORE, {ts:now, data:json});
+  await idbPut(IDB_BACKUP_STORE, {ts:now, data:await externalizeJson(json)});
   const all = await idbGetAll(IDB_BACKUP_STORE);
   if(all.length > BACKUP_MAX_COUNT){
     all.sort((a,b)=>a.ts-b.ts);
     for(const b of all.slice(0, all.length-BACKUP_MAX_COUNT)) await idbDelete(IDB_BACKUP_STORE, b.ts);
   }
 }
+// --- Bilder auslagern (Base64 im Notiztext -> eigener Eintrag "aimg:<hash>") + Änderungsverfolgung für den Cloud-Abgleich ---
+const IMG_RE=/data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+/g, TOK_RE=/aimg:([0-9a-f]{32})/g;
+const knownImgs=new Set(); let lastSlim=null, syncMeta=null;
+async function sha32(s){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].slice(0,16).map(x=>x.toString(16).padStart(2,'0')).join(''); }
+function blobToUrl(b){ return new Promise(r=>{ const f=new FileReader(); f.onload=()=>r(f.result); f.onerror=()=>r(null); f.readAsDataURL(b); }); }
+async function externalizeJson(json){
+  const urls=[...new Set(json.match(IMG_RE)||[])]; if(!urls.length) return json;
+  const map=new Map();
+  try{
+    for(const u of urls){ const id=await sha32(u); map.set(u,id);
+      if(knownImgs.has(id)) continue;
+      if(!(await idbGet(IDB_IMG_STORE,id))){ const blob=await (await fetch(u)).blob(); if(!(await idbPut(IDB_IMG_STORE,blob,id))) return json; }
+      knownImgs.add(id); }
+  }catch(e){ console.warn('Bilder auslagern fehlgeschlagen', e); return json; } // im Zweifel Bilder im Text lassen
+  return json.replace(IMG_RE,u=>'aimg:'+map.get(u));
+}
+async function inflateJson(json){
+  const ids=[...new Set([...json.matchAll(TOK_RE)].map(m=>m[1]))]; if(!ids.length) return json;
+  const map=new Map();
+  for(const id of ids){ const b=await idbGet(IDB_IMG_STORE,id); const u=b?await blobToUrl(b):null; if(u){ map.set(id,u); knownImgs.add(id); } }
+  return json.replace(TOK_RE,(m,id)=>map.get(id)||m);
+}
+function h53(str){ let h1=0xdeadbeef,h2=0x41c6ce57; for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909); h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36); }
+async function trackChanges(slim){ // merkt sich je Aufgabe/Bereich/Wiederkehrend: letzte Änderung (upd) und Löschung (del)
+  try{
+    if(!syncMeta){ const r=await idbGet(IDB_STATE_STORE,'syncmeta'); syncMeta=r?JSON.parse(r):{upd:{},hash:{},del:{}}; }
+    const d=JSON.parse(slim), now=Date.now(), seen=new Set(); let ch=false;
+    for(const k of ['tasks','areas','recurring']) for(const e of (d[k]||[])){ if(!e||e.id==null) continue;
+      const id=k+':'+e.id, h=h53(JSON.stringify(e)); seen.add(id);
+      if(syncMeta.hash[id]!==h){ syncMeta.hash[id]=h; syncMeta.upd[id]=now; delete syncMeta.del[id]; ch=true; } }
+    for(const id of Object.keys(syncMeta.hash)) if(!seen.has(id)){ delete syncMeta.hash[id]; delete syncMeta.upd[id]; syncMeta.del[id]=now; ch=true; }
+    if(ch) await idbPut(IDB_STATE_STORE,JSON.stringify(syncMeta),'syncmeta');
+  }catch(e){ console.warn('trackChanges',e); }
+}
 const store = {
   async get(){
     const idbJson = await idbGet(IDB_STATE_STORE, 'current');
-    if(idbJson){ try{ return JSON.parse(idbJson); }catch(e){} }
-    try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+    if(idbJson){ try{ return JSON.parse(await inflateJson(idbJson)); }catch(e){} }
+    try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(await inflateJson(raw)) : null; }catch(e){ return null; }
   },
   async set(data){
     data.savedAt = Date.now();
-    const json = JSON.stringify(data);
+    const json = await externalizeJson(JSON.stringify(data)); lastSlim = json;
     try{ localStorage.setItem(STORE_KEY, json); }catch(e){ console.error('localStorage speichern fehlgeschlagen', e); }
-    await idbPut(IDB_STATE_STORE, json, 'current');
+    await idbPut(IDB_STATE_STORE, json, 'current'); await trackChanges(json);
     await writeBackupSnapshot(json, false);
     // Zusätzlich (höchstens stündlich) als Datei in den gewählten Sicherungsordner.
     writeFolderBackup(false).catch(()=>{});
@@ -1528,7 +1565,7 @@ async function saveAreas(){ await saveAll(); }
 async function saveSettings(){ await saveAll(); }
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ saveAll(); } });
 window.addEventListener('beforeunload', ()=>{
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
+  try{ if(lastSlim) localStorage.setItem(STORE_KEY, lastSlim); }catch(e){}
   try{
     const running = findRunningEntity();
     if(running) localStorage.setItem(TIMER_CLOSE_MARKER_KEY, JSON.stringify({taskId:running.task.id, subId:running.sub?running.sub.id:null, closedAt:Date.now()}));
@@ -3165,12 +3202,12 @@ document.getElementById('backupList').addEventListener('click', async e=>{
     // Aktuellen Stand sichern, bevor er überschrieben wird - erst nach dem Laden der gewählten
     // Sicherung, damit der neue Snapshot sie nicht aus der 30er-Liste verdrängt.
     await writeBackupSnapshot(JSON.stringify(state), true);
-    try{ state = Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]}, JSON.parse(b.data)); migrateState(); await saveAll(); renderAll(); alert('Sicherung wiederhergestellt.'); }
+    try{ state = Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]}, JSON.parse(await inflateJson(b.data))); migrateState(); await saveAll(); renderAll(); alert('Sicherung wiederhergestellt.'); }
     catch(err){ alert('Diese Sicherung konnte nicht gelesen werden.'); }
   } else if(dl){
     const ts = Number(dl.dataset.dlBackup);
     const b = (await idbGetAll(IDB_BACKUP_STORE)).find(x=>x.ts===ts);
-    if(b){ const bd=new Date(ts); downloadText(exportFilename(`Sicherung_${pad(bd.getHours())}${pad(bd.getMinutes())}`,'json',bd), b.data, 'application/json;charset=utf-8'); }
+    if(b){ const bd=new Date(ts); downloadText(exportFilename(`Sicherung_${pad(bd.getHours())}${pad(bd.getMinutes())}`,'json',bd), await inflateJson(b.data), 'application/json;charset=utf-8'); }
   }
 });
 function renderAreasBlock(){
@@ -5169,6 +5206,7 @@ document.getElementById('nbShowDone').addEventListener('change', async e=>{ awai
 
 
 await loadState();
+try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 applyTheme();
 await initDataFile();
 document.getElementById('loading').style.display='none';
