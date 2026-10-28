@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1e3a5f">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -624,6 +624,13 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .nb-imgtb button{border:0;background:none;color:var(--ink);cursor:pointer;border-radius:6px;padding:4px 7px;font:inherit;font-size:12.5px}
 .nb-imgtb button:hover{background:var(--surface-2)}
 .nb-imgsel .grip{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:var(--accent);border:2px solid var(--surface);border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none}
+/* Mobil: Menüleiste unten immer vollständig erreichbar (sonst scrollbar), Platz für Android-Navigationsleiste */
+@media(max-width:760px){
+  .sidebar{overflow-x:auto;overflow-y:hidden;justify-content:flex-start;gap:0;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));scrollbar-width:none;}
+  .sidebar::-webkit-scrollbar{display:none;}
+  .nav-btn{flex:1 0 auto;min-width:44px;font-size:9.5px;padding:6px 5px;}
+  .main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px));}
+}
 </style>
 </head>
 <body>
@@ -912,6 +919,17 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         </div>
         <div id="legacyBody" class="storage-note"></div>
       </div>
+      <div class="settings-block" id="settingsOneDrive">
+        <h4>OneDrive-Sync (PC ⇄ Handy)</h4>
+        <div class="hint">Gleicht Aufgaben, Notizen und Bilder über einen eigenen App-Ordner in deinem privaten OneDrive ab. Dafür einmalig bei Microsoft eine App registrieren und die Anwendungs-(Client-)ID hier eintragen. Umleitungs-URI (SPA): <b id="odRedirect"></b></div>
+        <div class="export-row">
+          <input type="text" id="odClientId" placeholder="Anwendungs-(Client-)ID" style="min-width:290px;">
+          <button class="btn primary" id="odLogin">Mit Microsoft anmelden</button>
+          <button class="btn" id="odSyncNow">Jetzt synchronisieren</button>
+          <button class="btn" id="odLogout">Abmelden</button>
+        </div>
+        <div class="storage-note" id="odStatus"></div>
+      </div>
       <div class="settings-block" id="settingsDataFile">
         <h4>Datendatei (JSON) – dauerhafte Speicherung</h4>
         <div class="hint">Zusätzlich zum Browser-Speicher kann jede Änderung automatisch in eine echte JSON-Datei auf deiner Festplatte geschrieben werden (nur Chrome/Edge). Beim nächsten Start wird sie automatisch wieder verbunden – ggf. mit einem Klick auf „Fortsetzen“.</div>
@@ -925,7 +943,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
           <button class="btn" id="btnExportPDF">⬇ Als PDF exportieren</button>
           <button class="btn" id="btnExportJSON">⬇ Sicherung exportieren (JSON)</button>
           <button class="btn" id="btnImportJSON">⬆ Sicherung importieren</button>
-          <input type="file" id="fileImport" accept="application/json" style="display:none;">
+          <input type="file" id="fileImport" style="display:none;">
         </div>
         <div class="storage-note" id="storageNote"></div>
       </div>
@@ -1427,6 +1445,7 @@ const store = {
     // Zusätzlich (höchstens stündlich) als Datei in den gewählten Sicherungsordner.
     writeFolderBackup(false).catch(()=>{});
   try{ scheduleDataFileWrite(); }catch(e){}
+  try{ odScheduleSync(); }catch(e){}
   }
 };
 
@@ -3384,7 +3403,7 @@ document.getElementById('btnImportJSON').addEventListener('click', ()=>document.
 document.getElementById('fileImport').addEventListener('change', async e=>{
   const file = e.target.files[0]; if(!file) return;
   try{ const data = JSON.parse(await file.text()); await importAnyData(data, file.name); }
-  catch(err){ console.error(err); alert('Die Datei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei der Aufgabenverwaltung (alt oder neu).'); }
+  catch(err){ console.error(err); alert('Die Datei konnte nicht gelesen werden ('+(err&&err.message?err.message:err)+'). Erwartet wird eine JSON-Datei der Aufgabenverwaltung (alt oder neu).'); }
   e.target.value = '';
 });
 
@@ -5205,8 +5224,122 @@ document.getElementById('nbSearch').addEventListener('input', async e=>{ await n
 document.getElementById('nbShowDone').addEventListener('change', async e=>{ await nbFinish(true); nbShowDone = e.target.checked; renderNotebook(); });
 
 
+// --- OneDrive-Sync (OAuth2 Code+PKCE gegen Microsoft Graph, App-Ordner; Abgleich pro Aufgabe/Bereich nach Zeitstempel) ---
+const OD_AUTH='https://login.microsoftonline.com/consumers/oauth2/v2.0/', OD_SCOPE='Files.ReadWrite.AppFolder offline_access';
+let odBusy=false, odApplying=false, odTimer=null, odMsg='';
+const odRedirect=()=>location.origin+location.pathname, odCid=()=>localStorage.getItem('od-cid')||'';
+const odAuth=()=>{ try{ return JSON.parse(localStorage.getItem('od-auth')||'null'); }catch(e){ return null; } };
+const odNorm=o=>{ const c=Object.assign({},o); delete c.savedAt; return JSON.stringify(c); };
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+function odSet(m){ odMsg=m||''; odRender(); }
+function odRender(){
+  const el=document.getElementById('odStatus'); if(!el) return;
+  const a=odAuth(), last=Number(localStorage.getItem('od-last')||0);
+  document.getElementById('odRedirect').textContent=odRedirect();
+  el.textContent=(a?'Angemeldet. ':'Nicht angemeldet. ')+(last?'Letzter Abgleich: '+fmtDateTime(last)+'. ':'')+odMsg;
+}
+async function odLogin(){
+  const cid=document.getElementById('odClientId').value.trim(); if(!cid){ alert('Bitte zuerst die Client-ID eintragen.'); return; }
+  localStorage.setItem('od-cid',cid);
+  const v=b64u(crypto.getRandomValues(new Uint8Array(48))), st=b64u(crypto.getRandomValues(new Uint8Array(12)));
+  const ch=b64u(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)));
+  sessionStorage.setItem('od-pkce',JSON.stringify({v,st}));
+  location.href=OD_AUTH+'authorize?'+new URLSearchParams({client_id:cid,response_type:'code',redirect_uri:odRedirect(),response_mode:'query',scope:OD_SCOPE,code_challenge:ch,code_challenge_method:'S256',state:st,prompt:'select_account'});
+}
+async function odTokenReq(params){
+  const r=await fetch(OD_AUTH+'token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(Object.assign({client_id:odCid(),scope:OD_SCOPE},params))});
+  const j=await r.json(); if(!r.ok) throw new Error(j.error_description||j.error||'Anmeldung fehlgeschlagen');
+  localStorage.setItem('od-auth',JSON.stringify({at:j.access_token,rt:j.refresh_token||(odAuth()||{}).rt,exp:Date.now()+j.expires_in*1000}));
+}
+async function odToken(){
+  const a=odAuth(); if(!a) throw new Error('Nicht angemeldet.');
+  if(Date.now()<a.exp-60000) return a.at;
+  try{ await odTokenReq({grant_type:'refresh_token',refresh_token:a.rt}); }catch(e){ localStorage.removeItem('od-auth'); throw new Error('Anmeldung abgelaufen – bitte erneut anmelden.'); }
+  return odAuth().at;
+}
+async function odHandleRedirect(){
+  const q=new URLSearchParams(location.search); if(!q.get('code')&&!q.get('error')) return;
+  const pk=JSON.parse(sessionStorage.getItem('od-pkce')||'null'); history.replaceState(null,'',location.pathname);
+  if(q.get('error')){ odSet('Anmeldung abgebrochen: '+(q.get('error_description')||q.get('error'))); return; }
+  if(!pk||pk.st!==q.get('state')) return;
+  try{ await odTokenReq({grant_type:'authorization_code',code:q.get('code'),redirect_uri:odRedirect(),code_verifier:pk.v}); sessionStorage.removeItem('od-pkce'); }catch(e){ odSet(e.message); }
+}
+async function odFetch(path,opt){
+  const t=await odToken(), url=path.startsWith('http')?path:'https://graph.microsoft.com/v1.0/me/drive/special/approot'+path;
+  return fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},(opt||{}).headers||{})}));
+}
+function odMime(u8){ if(u8[0]===0xFF&&u8[1]===0xD8) return 'image/jpeg'; if(u8[0]===0x89&&u8[1]===0x50) return 'image/png'; if(u8[0]===0x47&&u8[1]===0x49) return 'image/gif'; if(u8[0]===0x52&&u8[1]===0x49) return 'image/webp'; return 'application/octet-stream'; }
+async function odGet(rel){
+  const r=await odFetch(':/'+rel); if(r.status===404) return null; if(!r.ok) throw new Error('OneDrive '+r.status);
+  const m=await r.json(), d=await fetch(m['@microsoft.graph.downloadUrl']); if(!d.ok) throw new Error('Download '+d.status);
+  return {buf:await d.arrayBuffer(), etag:m.eTag};
+}
+async function odPut(rel,blob,etag){
+  const r=await odFetch(':/'+rel+':/content',{method:'PUT',body:blob,headers:Object.assign({'Content-Type':blob.type||'application/octet-stream'},etag?{'If-Match':etag}:{})});
+  if(!r.ok){ const e=new Error('Hochladen '+r.status); e.code=r.status; throw e; }
+}
+function odMerge(L,lm,C,cm){
+  const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={upd:{},hash:{},del:{}};
+  for(const k of ['tasks','areas','recurring']){
+    const lmap=new Map((L[k]||[]).map(e=>[k+':'+e.id,e])), cmap=new Map((C[k]||[]).map(e=>[k+':'+e.id,e])), res=[];
+    for(const id of new Set([...lmap.keys(),...cmap.keys()])){
+      const lt=Math.max(lm.upd[id]||0,lm.del[id]||0), ct=Math.max(cm.upd[id]||0,cm.del[id]||0), c=ct>lt, src=c?cm:lm, ent=(c?cmap:lmap).get(id);
+      if(ent){ res.push(ent); meta.upd[id]=src.upd[id]||Date.now(); meta.hash[id]=h53(JSON.stringify(ent)); } else meta.del[id]=src.del[id]||Date.now();
+    }
+    out[k]=res;
+  }
+  return {merged:out,meta};
+}
+async function odSync(manual,retry){
+  if(odBusy||!odAuth()) return;
+  if(typeof nbEditing!=='undefined'&&nbEditing){ odScheduleSync(6000); return; }
+  odBusy=true; odSet('Synchronisiere …');
+  try{
+    await saveAll();
+    const L=JSON.parse(await externalizeJson(JSON.stringify(state))), lm=JSON.parse(JSON.stringify(syncMeta||{upd:{},hash:{},del:{}}));
+    const cf=await odGet('daten.json'); let C=null,cm=null,merged,meta;
+    if(cf){ const o=JSON.parse(new TextDecoder().decode(cf.buf)); C=o.state; cm=o.meta; }
+    if(!C){ merged=L; meta=lm; }
+    else if(!localStorage.getItem('od-first')){
+      if(!confirm('In OneDrive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den OneDrive-Stand ersetzen?\n\nOK = OneDrive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
+      await writeBackupSnapshot(JSON.stringify(state),true); merged=C; meta=cm;
+    } else ({merged,meta}=odMerge(L,lm,C,cm));
+    const ids=[...new Set([...JSON.stringify(merged).matchAll(TOK_RE)].map(m=>m[1]))], have=new Set();
+    let url=':/images:/children?$select=name&$top=999';
+    while(url){ const r=await odFetch(url); if(!r.ok) break; const j=await r.json(); (j.value||[]).forEach(f=>have.add(f.name)); url=j['@odata.nextLink']||null; }
+    for(const id of ids){
+      const loc=await idbGet(IDB_IMG_STORE,id);
+      if(loc&&!have.has(id)) await odPut('images/'+id,loc);
+      else if(!loc&&have.has(id)){ const f=await odGet('images/'+id); if(f){ await idbPut(IDB_IMG_STORE,new Blob([f.buf],{type:odMime(new Uint8Array(f.buf,0,4))}),id); knownImgs.add(id); } }
+    }
+    if(odNorm(merged)!==odNorm(L)){
+      odApplying=true;
+      try{
+        state=Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]},JSON.parse(await inflateJson(JSON.stringify(merged))));
+        migrateState(); reconcileRunningTimers(); applyTheme(); syncMeta=meta; await idbPut(IDB_STATE_STORE,JSON.stringify(meta),'syncmeta'); await saveAll(); renderAll();
+      } finally { odApplying=false; }
+    }
+    if(!C||JSON.stringify([odNorm(merged),meta.upd,meta.del])!==JSON.stringify([odNorm(C),cm.upd,cm.del]))
+      await odPut('daten.json',new Blob([JSON.stringify({v:1,savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf&&cf.etag);
+    localStorage.setItem('od-first','1'); localStorage.setItem('od-last',String(Date.now())); odBusy=false; odSet('');
+  }catch(e){
+    odBusy=false;
+    if(e.code===412&&!retry) return odSync(manual,true);
+    odSet('Fehler: '+(e.message||e));
+  }
+}
+function odScheduleSync(ms){ if(!odAuth()||odApplying) return; clearTimeout(odTimer); odTimer=setTimeout(()=>odSync(false),ms||5000); }
+async function odInit(){
+  const ci=document.getElementById('odClientId'); ci.value=odCid();
+  document.getElementById('odLogin').onclick=odLogin;
+  document.getElementById('odSyncNow').onclick=()=>{ if(!odAuth()){ odSet('Bitte zuerst anmelden.'); return; } odSync(true); };
+  document.getElementById('odLogout').onclick=()=>{ localStorage.removeItem('od-auth'); localStorage.removeItem('od-first'); odSet('Abgemeldet.'); };
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) odScheduleSync(1500); });
+  await odHandleRedirect(); odRender(); odScheduleSync(1500);
+}
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
+odInit().catch(e=>console.warn('odInit',e));
 applyTheme();
 await initDataFile();
 document.getElementById('loading').style.display='none';
