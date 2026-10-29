@@ -624,6 +624,9 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .nb-edwrap{flex:1;min-width:0;position:relative}
 .nb-edit{min-height:72px;background:var(--surface);border:1.5px solid var(--accent);border-radius:8px;padding:9px 12px;outline:none;font-size:14.5px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere}
 .nb-txt [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]),.nb-edit [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]){color:#1a1a1a !important}
+.prog-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:1px 9px}
+.prog-chip.unset{color:var(--ink-faint);border-style:dashed}
+.prog-chip .pb{width:48px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}.prog-chip .pb i{display:block;height:100%;background:var(--accent)}
 .nb-edit:empty:before{content:attr(data-ph);color:var(--ink-faint)}
 .nb-edrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink-faint)}
 .nb-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:14px}
@@ -1132,6 +1135,11 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
             <div class="hint" id="fRecurHint" style="display:none;margin:-6px 0 14px;font-size:12px;color:var(--ink-muted);">Beim Erledigen dieser Aufgabe wird automatisch die nächste Instanz mit gleichem Titel/Bereich/Priorität/Unteraufgaben angelegt.</div>
           </div>
         </div>
+        <div class="field d-only" id="fProgWrap">
+          <label>Fortschritt gesamt (Bauchgefühl, unabhängig von Stunden)</label>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="range" id="fProg" min="0" max="100" step="5" value="0" style="flex:1;min-width:140px"><input type="text" id="fProgNum" inputmode="numeric" style="width:54px;text-align:right"> %<button type="button" class="btn small ghost" id="fProgSug">Vorschlag übernehmen</button></div>
+          <div class="hint" id="fProgHint"></div>
+        </div>
         <div class="tm-sec">
           <h4 class="d-only">Unteraufgaben &amp; Zeiten <span class="sum" id="tmSubSum"></span></h4>
           <div class="field q-only" id="fEstQuickWrap">
@@ -1539,6 +1547,7 @@ function migrateState(){
     t.estHours = parseHours(t.estHours);
     t.priority = ['high','mid','low'].includes(t.priority) ? t.priority : 'mid';
     t.manualStatus = t.manualStatus || null;
+    t.progress = (t.progress!=null && Number.isFinite(Number(t.progress))) ? Math.max(0,Math.min(100,Math.round(Number(t.progress)))) : null; t.progressAt = t.progressAt || null;
     t.remindedAt = Number(t.remindedAt)||0;
     t.client = typeof t.client === 'string' ? t.client : '';
     t.startDate = /^\d{4}-\d{2}-\d{2}$/.test(t.startDate||'') ? t.startDate : null;
@@ -1736,6 +1745,19 @@ function insertByPriorityClass(task){
   open.forEach((t,i)=> t.priorityOrder = i);
 }
 function fmtDateTimeShort(iso){ const d=new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+// Vorschlag fuer den Gesamtfortschritt aus den Unteraufgaben: erledigte Unteraufgaben, gewichtet nach geplanter Dauer
+// (ohne Schaetzung: Durchschnitt der geschaetzten, sonst gleiches Gewicht). Gebuchte Stunden fliessen bewusst nicht ein.
+function progressSuggestion(subs){
+  subs=(subs||[]).filter(x=>x&&String(x.title||'').trim()); if(!subs.length) return null;
+  const est=subs.map(x=>parseHours(x.estHours)).filter(h=>h>0), avg=est.length?est.reduce((a,b)=>a+b,0)/est.length:1;
+  let tot=0, done=0, nDone=0; subs.forEach(x=>{ const w=parseHours(x.estHours)>0?parseHours(x.estHours):avg; tot+=w; if(x.done){ done+=w; nDone++; } });
+  return {pct:Math.round(done/tot*100), done:nDone, total:subs.length};
+}
+function progressChipHtml(t){
+  if(t.done) return '';
+  const p=t.progress, at=t.progressAt?fmtDate(String(t.progressAt).slice(0,10)):'';
+  return p!=null ? `<span class="prog-chip" data-set-progress="${t.id}" title="Geschätzter Fortschritt${at?' (Stand '+at+')':''} - klicken zum Ändern"><span class="pb"><i style="width:${p}%"></i></span>${p} %</span>` : `<span class="prog-chip unset" data-set-progress="${t.id}" title="Fortschritt schätzen">Fortschritt schätzen</span>`;
+}
 function logChange(t, field, fromLabel, toLabel){
   if(fromLabel === toLabel) return;
   t.changeLog = t.changeLog || [];
@@ -2445,6 +2467,7 @@ function taskCardHtml(t, opts){
       ${openStatusPickerFor===t.id?`<div class="quick-picker">${MANUAL_STATUS_OPTIONS.map(s=>`<span class="quick-picker-opt status-${s} ${s===status?'current':''}" data-pick-status="${s}">${STATUS_META[s].label}</span>`).join('')}</div>`:''}
       <div class="task-meta">
         ${est>0?`<span class="${over?'over':''}">${fmtHours(spent)} / ${fmtHours(est)}</span><div class="progress-bar"><div style="width:${pct}%"></div></div>`:'<span>Keine Zeitschätzung</span>'}
+        ${progressChipHtml(t)}
         ${!t.done && !t.subtasks.length?`<span class="timer-chip ${t.timerRunning?'running':''}" data-timer="${t.id}"><span class="dot"></span><span class="tval">${fmtHMS(t.timeSpentSec||0)}</span></span>`:''}
       </div>
       ${subtasksBlockHtml(t, !!opts.compact)}
@@ -2503,6 +2526,15 @@ document.getElementById('statusChips').addEventListener('click', e=>{
   if(statusFilterKeys.has(k)) statusFilterKeys.delete(k); else statusFilterKeys.add(k);
   renderList();
 });
+function progHintRefresh(){
+  const h=document.getElementById('fProgHint'); if(!h) return; const sl=document.getElementById('fProg'), sug=progressSuggestion(editSubtasks), t=editingTaskId?state.tasks.find(x=>x.id===editingTaskId):null;
+  const at=t&&t.progressAt?' · zuletzt geschätzt am '+fmtDate(String(t.progressAt).slice(0,10)):'';
+  h.textContent=(sl.dataset.had||sl.dataset.touched?'':'Noch nicht geschätzt. ')+(sug?'Vorschlag aus Unteraufgaben: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt, nach geplanter Dauer gewichtet)':'Keine Unteraufgaben – reine Schätzung.')+at;
+}
+document.getElementById('fProg').addEventListener('input',e=>{ e.target.dataset.touched='1'; document.getElementById('fProgNum').value=e.target.value; progHintRefresh(); });
+document.getElementById('fProgNum').addEventListener('input',e=>{ const v=Math.max(0,Math.min(100,parseInt(String(e.target.value).replace(/[^\d]/g,''),10)||0)); const sl=document.getElementById('fProg'); sl.value=v; sl.dataset.touched='1'; });
+document.getElementById('fProgSug').addEventListener('click',()=>{ const sug=progressSuggestion(editSubtasks); if(!sug) return; const sl=document.getElementById('fProg'); sl.value=sug.pct; sl.dataset.touched='1'; document.getElementById('fProgNum').value=sug.pct; });
+document.getElementById('taskModalBg').addEventListener('click',()=>setTimeout(progHintRefresh,0));
 async function handleTaskCardClick(e){
   const del=e.target.closest('[data-del]'), edit=e.target.closest('[data-edit]'), done=e.target.closest('[data-toggle-done]'), timer=e.target.closest('[data-toggle-timer]'), addTime=e.target.closest('[data-add-time]');
   const subTimer=e.target.closest('[data-toggle-sub-timer]'), addSubTime=e.target.closest('[data-add-sub-time]');
@@ -2516,6 +2548,15 @@ async function handleTaskCardClick(e){
     // Klick auf ein Tag-Etikett: Aufgabenliste nach diesem Tag filtern.
     document.querySelector('.nav-btn[data-view="list"]').click();
     renderFilters(); document.getElementById('filterTag').value = tagBadge.dataset.filterTag; renderList(); return;
+  }
+  const setProg = e.target.closest('[data-set-progress]');
+  if(setProg){
+    const t=state.tasks.find(x=>x.id===setProg.dataset.setProgress); if(!t) return;
+    const sug=progressSuggestion(t.subtasks);
+    const txt=prompt('Wie viel von „'+t.title+'“ ist erledigt? (0–100 %)'+(sug?'\nVorschlag aus Unteraufgaben: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt)':''), t.progress!=null?t.progress:(sug?sug.pct:''));
+    if(txt===null) return; const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return;
+    const nv=Math.max(0,Math.min(100,v)); logChange(t,'Fortschritt (Schätzung)',t.progress!=null?t.progress+' %':'–',nv+' %');
+    t.progress=nv; t.progressAt=new Date().toISOString(); await saveTasks(); renderAll(); return;
   }
   if(subsToggle){ subsToggle.closest('[data-id]')?.classList.toggle('subs-expanded'); return; }
   if(ownTimer){ toggleTimer(ownTimer.dataset.toggleOwnTimer, null); return; }
@@ -2577,6 +2618,7 @@ function openTaskModal(id){
   document.getElementById('fPriority').value = t ? t.priority : 'mid';
   document.getElementById('fEstHours').value = t && t.estHours ? String(t.estHours).replace('.',',') : '';
   document.getElementById('fStatus').value = t ? (t.manualStatus || '') : '';
+  { const pr=t&&t.progress!=null?t.progress:0, sl=document.getElementById('fProg'); sl.value=pr; sl.dataset.touched=''; sl.dataset.had=(t&&t.progress!=null)?'1':''; document.getElementById('fProgNum').value=pr; progHintRefresh(); }
   document.getElementById('fWaitInputs').innerHTML = waitDeadlineInputsHtml(t && t.manualStatus==='wartet_auf_info' ? waitDueDate(t) : defaultWaitUntil());
   updateWaitUI();
   editTags = t ? (t.tags||[]).slice() : [];
@@ -2934,6 +2976,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   const waitVal = document.querySelector('#fWaitInputs [data-wait-date]')?.value;
   const newWaitUntil = newManualStatus==='wartet_auf_info' ? (/^\d{4}-\d{2}-\d{2}$/.test(waitVal||'') ? waitVal : defaultWaitUntil()) : null;
   const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
+  { const sl=document.getElementById('fProg'); if(sl.dataset.touched){ data.progress=Math.max(0,Math.min(100,parseInt(sl.value,10)||0)); data.progressAt=new Date().toISOString(); if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'–',data.progress+' %'); } }
   if(old){
     logChange(old, 'Titel', old.title, title);
     logChange(old, 'Bereich', areaById(old.area)?.name||'–', areaById(newArea)?.name||'–');
@@ -3386,7 +3429,7 @@ document.getElementById('btnExportExcel').addEventListener('click', ()=>{
     {Kennzahl:'Erledigt gesamt', Wert:realTasks.filter(t=>t.done).length},
     {Kennzahl:'Erstellt am', Wert:new Date().toLocaleString('de-DE')}
   ];
-  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
+  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Fortschritt (geschätzt, %)':t.done?100:(t.progress!=null?t.progress:''),'Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
   const subRows=[]; realTasks.forEach(t=>{ if(t.subtasks.length && (parseHours(t.estHours)>0 || entitySpentHours(t)>0)) subRows.push({Aufgabe:t.title,Unteraufgabe:'Allgemein','Geschätzt (Std.)':parseHours(t.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein'}); t.subtasks.forEach(s=>subRows.push({Aufgabe:t.title,Unteraufgabe:s.title,'Geschätzt (Std.)':parseHours(s.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(s)*100)/100,Erledigt:s.done?'Ja':'Nein'})); });
   const sourceLabel={timer:'Timer',manual:'Manuell',auto:'Auto'};
   const eventRows=[];
@@ -5547,7 +5590,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=13, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=14, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
