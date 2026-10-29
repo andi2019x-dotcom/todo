@@ -623,6 +623,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .nb-pal.menu{flex-direction:column;align-items:stretch}
 .nb-edwrap{flex:1;min-width:0;position:relative}
 .nb-edit{min-height:72px;background:var(--surface);border:1.5px solid var(--accent);border-radius:8px;padding:9px 12px;outline:none;font-size:14.5px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere}
+.nb-txt [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]),.nb-edit [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]){color:#1a1a1a !important}
 .nb-edit:empty:before{content:attr(data-ph);color:var(--ink-faint)}
 .nb-edrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink-faint)}
 .nb-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:14px}
@@ -5158,6 +5159,11 @@ function nbFileToDataUrl(file, max=1800, q=.86){
 }
 function nbAddFiles(ed, files){ [...files].filter(f=>f.type.startsWith('image/')).forEach(async f=>{ try{ nbInsertImg(ed, await nbFileToDataUrl(f)); }catch(e){ alert('Bild konnte nicht gelesen werden.'); } }); }
 function nbPick(ed){ const i = document.createElement('input'); i.type='file'; i.accept='image/*'; i.multiple=true; i.onchange = ()=>nbAddFiles(ed, i.files); i.click(); }
+function nbStripColor(ed, props){ // Farbe/Markierung im Auswahlbereich entfernen (Standardfarbe des Designs gilt wieder)
+  const s=getSelection(); if(!s.rangeCount) return; const r=s.getRangeAt(0);
+  ed.querySelectorAll('[style]').forEach(el=>{ try{ if(!r.intersectsNode(el)) return; }catch(e){ return; } props.forEach(p=>el.style.removeProperty(p)); if(!el.getAttribute('style')) el.removeAttribute('style'); });
+  ed.querySelectorAll('font[color]').forEach(el=>{ try{ if(props.includes('color') && r.intersectsNode(el)) el.removeAttribute('color'); }catch(e){} });
+}
 function nbOpenEditor(host, note){
   if(nbEditing){ nbEditing.querySelector('.nb-edit').focus(); return; }
   const label = host.closest('.nb-sec').dataset.label;
@@ -5183,7 +5189,8 @@ function nbOpenEditor(host, note){
     const closePal = ()=>tb.querySelectorAll('.nb-pal').forEach(x=>x.remove());
     if(c){ nbFocusEd(ed); document.execCommand(c.dataset.c); return; }
     if(sw){ nbFocusEd(ed); document.execCommand('styleWithCSS', false, true); const v = sw.dataset.col;
-      if(sw.dataset.kind==='fore') document.execCommand('foreColor', false, v==='reset' ? getComputedStyle(ed).color : v); else document.execCommand('hiliteColor', false, v==='reset' ? 'transparent' : v);
+      if(v==='reset'){ nbStripColor(ed, sw.dataset.kind==='fore' ? ['color'] : ['background-color','color']); }
+      else if(sw.dataset.kind==='fore') document.execCommand('foreColor', false, v); else document.execCommand('hiliteColor', false, v);
       document.execCommand('styleWithCSS', false, false); closePal(); return; }
     if(act){ closePal(); if(act.dataset.ins==='photo') nbPick(ed); else nbSketch(src=>nbInsertImg(ed, src), null); return; }
     if(p){ const had = tb.querySelector('.nb-pal'); closePal(); if(had) return;
@@ -5540,7 +5547,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=12, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=13, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
