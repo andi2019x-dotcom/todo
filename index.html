@@ -1447,18 +1447,26 @@ async function inflateJson(json){
 function h53(str){ let h1=0xdeadbeef,h2=0x41c6ce57; for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
   h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909); h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
   return (4294967296*(2097151&h2)+(h1>>>0)).toString(36); }
+function syncNorm(v){
+  if(Array.isArray(v)) return v.map(x=> (x&&typeof x==='object') ? (syncNorm(x)||{}) : x);
+  if(v&&typeof v==='object'){ const o={}; for(const k of Object.keys(v).sort()){ const x=syncNorm(v[k]); if(x!==undefined && !(Array.isArray(x)&&!x.length)) o[k]=x; } return Object.keys(o).length?o:undefined; }
+  return (v===null||v===undefined||v===false||v===''||v===0) ? undefined : v;
+}
+function entHash(e){ return h53(JSON.stringify(syncNorm(e)||{})); }
 const SYNC_TK=['timerRunning','timerLastTick','timeSpentSec','timeLog','timeEvents','lastActivityAt'];
 function syncStripT(e){ const c=Object.assign({},e); SYNC_TK.forEach(k=>delete c[k]); if(Array.isArray(c.subtasks)) c.subtasks=c.subtasks.map(syncStripT); return c; }
 async function trackChanges(slim){ // merkt sich je Aufgabe/Bereich/Wiederkehrend: letzte Änderung (upd), letzte INHALTS-Änderung ohne Timerfelder (cupd) und Löschung (del)
   try{
     if(!syncMeta){ const r=await idbGet(IDB_STATE_STORE,'syncmeta'); syncMeta=r?JSON.parse(r):{upd:{},hash:{},del:{}}; }
     syncMeta.cupd=syncMeta.cupd||{}; syncMeta.chash=syncMeta.chash||{};
-    const d=JSON.parse(slim), now=Date.now(), seen=new Set(); let chg=false;
+    const d=JSON.parse(slim), now=Date.now(), seen=new Set(), rebase=syncMeta.hv!==2; let chg=false;
     for(const k of ['tasks','areas','recurring']) for(const e of (d[k]||[])){ if(!e||e.id==null) continue;
-      const id=k+':'+e.id, h=h53(JSON.stringify(e)), c=k==='tasks'?h53(JSON.stringify(syncStripT(e))):h; seen.add(id);
+      const id=k+':'+e.id, h=entHash(e), c=k==='tasks'?entHash(syncStripT(e)):h; seen.add(id);
+      if(rebase && syncMeta.hash[id]!==undefined){ if(syncMeta.hash[id]!==h||syncMeta.chash[id]!==c){ syncMeta.hash[id]=h; syncMeta.chash[id]=c; chg=true; } continue; } // einmalige Umstellung des Hash-Verfahrens: keine Zeitstempel verändern
       if(syncMeta.hash[id]!==h){ syncMeta.hash[id]=h; syncMeta.upd[id]=now; delete syncMeta.del[id]; if(syncMeta.chash[id]!==c){ syncMeta.cupd[id]=now; syncMeta.chash[id]=c; } chg=true; }
       else if(syncMeta.chash[id]===undefined){ syncMeta.chash[id]=c; chg=true; } }
     for(const id of Object.keys(syncMeta.hash)) if(!seen.has(id)){ delete syncMeta.hash[id]; delete syncMeta.upd[id]; delete syncMeta.cupd[id]; delete syncMeta.chash[id]; syncMeta.del[id]=now; chg=true; }
+    if(rebase){ syncMeta.hv=2; chg=true; }
     if(chg) await idbPut(IDB_STATE_STORE,JSON.stringify(syncMeta),'syncmeta');
   }catch(e){ console.warn('trackChanges',e); }
 }
@@ -5394,7 +5402,7 @@ function odMergeEntity(k,id,le,ce,lm,cm,base){
 }
 function odMerge(L,lm,C,cm,base){
   base=base||0;
-  const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={upd:{},cupd:{},hash:{},chash:{},del:{}};
+  const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={hv:2,upd:{},cupd:{},hash:{},chash:{},del:{}};
   for(const k of ['tasks','areas','recurring']){
     const lmap=new Map((L[k]||[]).map(e=>[k+':'+e.id,e])), cmap=new Map((C[k]||[]).map(e=>[k+':'+e.id,e])), res=[];
     for(const id of new Set([...lmap.keys(),...cmap.keys()])){
@@ -5403,11 +5411,11 @@ function odMerge(L,lm,C,cm,base){
         let ent,upd,cupd;
         if(JSON.stringify(le)===JSON.stringify(ce)){ ent=le; upd=Math.max(lm.upd[id]||0,cm.upd[id]||0)||Date.now(); cupd=Math.max((lm.cupd||{})[id]||0,(cm.cupd||{})[id]||0)||upd; }
         else { const m=odMergeEntity(k,id,le,ce,lm,cm,base); ent=m.ent; upd=m.upd||Date.now(); cupd=m.cupd||upd; }
-        res.push(ent); meta.upd[id]=upd; meta.cupd[id]=cupd; meta.hash[id]=h53(JSON.stringify(ent)); meta.chash[id]=k==='tasks'?h53(JSON.stringify(syncStripT(ent))):meta.hash[id];
+        res.push(ent); meta.upd[id]=upd; meta.cupd[id]=cupd; meta.hash[id]=entHash(ent); meta.chash[id]=k==='tasks'?entHash(syncStripT(ent)):meta.hash[id];
         continue;
       }
       const lt=Math.max(lm.upd[id]||0,lm.del[id]||0), ct=Math.max(cm.upd[id]||0,cm.del[id]||0), c=ct>lt, src=c?cm:lm, ent=c?ce:le;
-      if(ent){ res.push(ent); meta.upd[id]=src.upd[id]||Date.now(); meta.cupd[id]=(src.cupd&&src.cupd[id]!=null)?src.cupd[id]:meta.upd[id]; meta.hash[id]=h53(JSON.stringify(ent)); meta.chash[id]=k==='tasks'?h53(JSON.stringify(syncStripT(ent))):meta.hash[id]; } else meta.del[id]=src.del[id]||Date.now();
+      if(ent){ res.push(ent); meta.upd[id]=src.upd[id]||Date.now(); meta.cupd[id]=(src.cupd&&src.cupd[id]!=null)?src.cupd[id]:meta.upd[id]; meta.hash[id]=entHash(ent); meta.chash[id]=k==='tasks'?entHash(syncStripT(ent)):meta.hash[id]; } else meta.del[id]=src.del[id]||Date.now();
     }
     out[k]=res;
   }
@@ -5456,15 +5464,25 @@ async function gdPut(name,blob,ex){
   const bd='gdb'+Date.now(), body=new Blob(['--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name,parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: '+type+'\r\n\r\n',blob,'\r\n--'+bd+'--']);
   return gdOk(await gdFetch(GD_UP+'?uploadType=multipart',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body}));
 }
+function gdBuild(){ try{ return APP_BUILD; }catch(e){ return 0; } }
+async function gdCheckNewBuild(){ // Läuft auf dem Gerät noch eine ältere Version (z. B. App lange im Hintergrund), wird erst neu geladen - sonst überschreibt der alte Stand die Daten
+  try{
+    const r=await fetch('index.html',{cache:'no-store'}); if(!r.ok) return false;
+    const m=(await r.text()).match(/const APP_BUILD=(\d+)/); const nb=m?Number(m[1]):0;
+    if(nb>gdBuild() && sessionStorage.getItem('gd-reload')!==String(nb)){ sessionStorage.setItem('gd-reload',String(nb)); await saveAll(); location.reload(); return true; }
+  }catch(e){}
+  return false;
+}
 async function gdSync(manual,retry){
   if(gdBusy||!gdAuth()) return;
   if(typeof nbEditing!=='undefined'&&nbEditing){ gdScheduleSync(6000); return; }
   gdBusy=true; gdSet('Synchronisiere …'); const gdT0=Date.now();
   try{
+    if(await gdCheckNewBuild()){ gdBusy=false; return; }
     await saveAll();
     const L=JSON.parse(await externalizeJson(JSON.stringify(state))), lm=JSON.parse(JSON.stringify(syncMeta||{upd:{},hash:{},del:{}}));
     const files=await gdList(), cf=files.get('daten.json'); let C=null,cm=null,merged,meta;
-    if(cf){ const o=JSON.parse(new TextDecoder().decode(await gdGet(cf))); C=o.state; cm=o.meta; }
+    if(cf){ const o=JSON.parse(new TextDecoder().decode(await gdGet(cf))); C=o.state; cm=o.meta; if((o.b||0)>gdBuild()) throw new Error('Auf Google Drive liegt der Stand einer neueren App-Version. Bitte unter Einstellungen „Neu laden“ drücken.'); }
     if(!C){ merged=L; meta=lm; }
     else if(!localStorage.getItem('gd-first')){
       if(!confirm('In Google Drive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den Google-Drive-Stand ersetzen?\n\nOK = Google Drive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
@@ -5485,7 +5503,7 @@ async function gdSync(manual,retry){
     }
     if(!C||JSON.stringify([odNorm(merged),meta.upd,meta.del])!==JSON.stringify([odNorm(C),cm.upd,cm.del])){
       if(cf){ const v=(await (await gdOk(await gdFetch(GD_API+'/'+cf.id+'?fields=version'))).json()).version; if(v!==cf.version){ const e=new Error('Konflikt'); e.code=412; throw e; } }
-      await gdPut('daten.json',new Blob([JSON.stringify({v:1,savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf);
+      await gdPut('daten.json',new Blob([JSON.stringify({v:1,b:gdBuild(),savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf);
     }
     localStorage.setItem('gd-first','1'); localStorage.setItem('gd-base',String(gdT0)); localStorage.setItem('gd-last',String(Date.now())); gdBusy=false; gdSet('');
   }catch(e){
@@ -5513,7 +5531,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=9, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=10, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
