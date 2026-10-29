@@ -1098,13 +1098,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
               <label>Zieldatum</label>
               <input type="date" id="fDueDate">
             </div>
-            <div class="field">
-              <label>Planung</label>
-              <select id="fPlanMode" title="Am Stück: wird nach Zieldatum komplett abgearbeitet. Parallel: Unteraufgaben werden nach ihren Terminen anteilig auf die Tage verteilt.">
-                <option value="seq">Am Stück</option>
-                <option value="par">Parallel</option>
-              </select>
-            </div>
+
           </div>
           <div class="field-row d-only">
             <div class="field" style="flex:2;">
@@ -2589,7 +2583,6 @@ function openTaskModal(id){
   renderTagEditor();
   document.getElementById('fResponsible').value = t ? (t.responsible || '') : '';
   document.getElementById('fDueDate').value = t ? (t.dueDate || '') : '';
-  document.getElementById('fPlanMode').value = (t && t.planMode==='par') ? 'par' : 'seq';
   document.getElementById('fClient').value = t ? (t.client || '') : '';
   document.getElementById('fStartDate').value = t ? (t.startDate || '') : '';
   const r = t && t.recurrence;
@@ -2939,7 +2932,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   applyNoteEdit(); addNoteFromInput();
   const waitVal = document.querySelector('#fWaitInputs [data-wait-date]')?.value;
   const newWaitUntil = newManualStatus==='wartet_auf_info' ? (/^\d{4}-\d{2}-\d{2}$/.test(waitVal||'') ? waitVal : defaultWaitUntil()) : null;
-  const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, planMode:(document.getElementById('fPlanMode').value==='par'?'par':'seq'), recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
+  const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
   if(old){
     logChange(old, 'Titel', old.title, title);
     logChange(old, 'Bereich', areaById(old.area)?.name||'–', areaById(newArea)?.name||'–');
@@ -3503,10 +3496,10 @@ document.getElementById('fileImport').addEventListener('change', async e=>{
   e.target.value = '';
 });
 
-// Planung: Dringlichkeit bestimmt der Zieltermin (früheste Frist zuerst; bei gleichem Datum bzw. ohne Termin
-// die manuelle Reihenfolge). Modus je Aufgabe: "seq" (Standard) = am Stück abarbeiten, "par" = parallel -
-// jede Einheit (Allgemein bzw. Unteraufgabe) bekommt täglich nur den Anteil, der für ihre Frist nötig ist,
-// freie Restzeit wird danach in Fristreihenfolge aufgefüllt.
+// Planung für eine Arbeitskraft: Es wird immer nur eine Einheit (Allgemein bzw. Unteraufgabe) bearbeitet,
+// und zwar die mit dem frühesten Zieltermin (Unteraufgabe ohne eigenen Termin: Termin der Aufgabe).
+// Gleiches Datum bzw. ohne Termin: manuelle Reihenfolge, Teile einer Aufgabe bleiben zusammen.
+// Eine Unteraufgabe wird nicht vor ihrem geplanten Start eingeplant.
 function buildSchedule(horizonDays=120){
   const tasks=schedulableTasks(), NODUE='9999-12-31', remaining={}, units={}, prio={}, segments={}, unitSeg={}, dayCaps={};
   tasks.forEach((t,i)=>{ prio[t.id]=i; remaining[t.id]=taskRemainingHours(t)*60; units[t.id]=taskUnits(t); segments[t.id]={}; unitSeg[t.id]={}; });
@@ -3526,16 +3519,12 @@ function buildSchedule(horizonDays=120){
     const cand=[];
     tasks.forEach(t=>{
       const el=units[t.id].filter(u=>u.rem>0 && !(u.startDate && ymd<u.startDate)); if(!el.length) return;
-      if(t.planMode==='par') el.forEach(u=>cand.push({t,u,par:true,rank:dueOf(t,u),pr:prio[t.id],ix:u.idx}));
-      else cand.push({t,el,par:false,rank:taskDue(t),pr:prio[t.id],ix:0});
+      el.forEach(u=>cand.push({t,u,rank:dueOf(t,u),pr:prio[t.id],ix:u.idx}));
     });
     cand.sort((x,y)=> x.rank<y.rank?-1: x.rank>y.rank?1 : x.pr-y.pr || x.ix-y.ix);
     let left=cap; const per={}, order=[];
     const give=(t,u,m)=>{ if(m<=0) return 0; const x=Math.min(m,u.rem,left); if(x<=0) return 0; u.rem-=x; u.last=ymd; remaining[t.id]-=x; left-=x; if(!per[t.id]){ per[t.id]=new Map(); order.push(t); } per[t.id].set(u.key,(per[t.id].get(u.key)||0)+x); return x; };
-    for(const c of cand){ if(left<=0) break;
-      if(c.par){ give(c.t,c.u,c.u.rem/workdaysFrom(di,dueOf(c.t,c.u))); }
-      else { for(const u of c.el){ if(left<=0) break; give(c.t,u,u.rem); } } }
-    for(const c of cand){ if(left<=0) break; if(c.par) give(c.t,c.u,c.u.rem); }
+    for(const c of cand){ if(left<=0) break; give(c.t,c.u,c.u.rem); }
     // Tagesbalken: Reihenfolge nach Rang, Unterzeilen mit eigenem Versatz.
     const rankOf={}; cand.forEach((c,k)=>{ if(rankOf[c.t.id]==null) rankOf[c.t.id]=k; });
     order.sort((x,y)=>rankOf[x.id]-rankOf[y.id]);
@@ -5551,7 +5540,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=11, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=12, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
