@@ -5444,7 +5444,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=7, APP_DATE='28.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=8, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
