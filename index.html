@@ -163,6 +163,12 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 .gantt-deadline{--dl:var(--mid);position:absolute;top:0;bottom:0;right:-3px;width:6px;z-index:2;cursor:default;}
 .gantt-deadline.late{--dl:var(--high);}
 .gantt-deadline.sub{right:-1px;}
+.gantt-toggle{cursor:pointer;margin-right:4px;color:var(--ink-muted);user-select:none;}
+.gantt-sub-label{font-size:11px;font-weight:500;color:var(--ink-muted);padding-left:22px;min-height:24px;background-image:linear-gradient(90deg,rgba(120,150,110,.25) var(--prog,0%),transparent var(--prog,0%));}
+.gantt-sub-cell{min-height:24px;}
+.gantt-sub-cell .gantt-bar{top:5px;bottom:5px;opacity:.85;}
+.gantt-window{position:absolute;left:0;right:0;top:9px;bottom:9px;background:rgba(120,130,110,.16);border-radius:3px;}
+.gantt-window.late{background:rgba(200,70,60,.18);}
 .gantt-deadline.sub::after{width:2px;opacity:.85;}
 .gantt-deadline.sub::before{left:3px;border-top-width:4px;border-bottom-width:4px;border-left-width:6px;}
 .gantt-deadline::after{content:'';position:absolute;left:1px;width:3px;top:0;bottom:0;background:var(--dl);box-shadow:0 0 0 1px rgba(255,255,255,.7);}
@@ -730,6 +736,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         <button class="btn small" id="btnGanttNext">→</button>
         <label class="check-inline"><input type="checkbox" id="chkPast"> Vergangenheit anzeigen</label>
         <label class="check-inline"><input type="checkbox" id="chkOnlyWorkdays"> Nur Arbeitstage anzeigen</label>
+        <label class="check-inline"><input type="checkbox" id="chkSubs"> Unteraufgaben anzeigen</label>
         <span id="ganttRangeLabel" class="view-sub" style="margin-left:6px;"></span>
         <button class="btn small" id="btnOpenCal" style="margin-left:auto;" title="Urlaub, Abwesenheiten und feste Termine eintragen">📅 Termine &amp; Urlaub</button>
       </div>
@@ -1091,6 +1098,13 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
               <label>Zieldatum</label>
               <input type="date" id="fDueDate">
             </div>
+            <div class="field">
+              <label>Planung</label>
+              <select id="fPlanMode" title="Am Stück: wird nach Zieldatum komplett abgearbeitet. Parallel: Unteraufgaben werden nach ihren Terminen anteilig auf die Tage verteilt.">
+                <option value="seq">Am Stück</option>
+                <option value="par">Parallel</option>
+              </select>
+            </div>
           </div>
           <div class="field-row d-only">
             <div class="field" style="flex:2;">
@@ -1287,7 +1301,8 @@ const FILTER_STATUS_LABELS = Object.assign({erledigt:'Erledigt', abgebrochen:'Ab
 const FILTER_STATUS_ACTIVE_DEFAULT = ['nicht_begonnen','in_bearbeitung','inaktiv','wartet_auf_info'];
 
 let state = { tasks: [], areas: [], settings: null, recurring: [] };
-let ganttRange = 'week', ganttAnchor = new Date(), showPast = false, showOnlyWorkdays = true;
+let ganttRange = 'week', ganttAnchor = new Date(), showPast = false, showOnlyWorkdays = true, showSubs = false;
+const ganttOpen = new Set(); // einzeln aufgeklappte Aufgaben
 let historyRange = 'week', historyAnchor = new Date();
 let editingTaskId = null, editSubtasks = [], openPaletteFor = null;
 let openStatusPickerFor = null, openPriorityPickerFor = null;
@@ -2205,7 +2220,7 @@ function plannedFinish(t, sched){
   // Reicht der Planungshorizont nicht, zählt das nur als "zu spät", wenn der Termin innerhalb liegt.
   const horizonEnd = Object.keys(s.dayCaps||{}).sort().pop() || '';
   const late = !t.done && !!t.dueDate && taskRemainingHours(t)>0 && ((!complete && t.dueDate <= horizonEnd) || (!!last && last > t.dueDate));
-  const subs = t.done ? [] : taskUnitFinish(t, seg).filter(u=>u.dueDate).map(u=>Object.assign(u,{late: (!u.complete && u.dueDate<=horizonEnd) || (!!u.last && u.last>u.dueDate)}));
+  const subs = t.done ? [] : (s.unitInfo&&s.unitInfo[t.id] ? s.unitInfo[t.id].map(u=>Object.assign({},u)) : taskUnitFinish(t, seg)).filter(u=>u.dueDate).map(u=>Object.assign(u,{late: (!u.complete && u.dueDate<=horizonEnd) || (!!u.last && u.last>u.dueDate)}));
   return {last, complete, late, subs, subLate: subs.find(u=>u.late)||null};
 }
 
@@ -2566,6 +2581,7 @@ function openTaskModal(id){
   renderTagEditor();
   document.getElementById('fResponsible').value = t ? (t.responsible || '') : '';
   document.getElementById('fDueDate').value = t ? (t.dueDate || '') : '';
+  document.getElementById('fPlanMode').value = (t && t.planMode==='par') ? 'par' : 'seq';
   document.getElementById('fClient').value = t ? (t.client || '') : '';
   document.getElementById('fStartDate').value = t ? (t.startDate || '') : '';
   const r = t && t.recurrence;
@@ -2915,7 +2931,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   applyNoteEdit(); addNoteFromInput();
   const waitVal = document.querySelector('#fWaitInputs [data-wait-date]')?.value;
   const newWaitUntil = newManualStatus==='wartet_auf_info' ? (/^\d{4}-\d{2}-\d{2}$/.test(waitVal||'') ? waitVal : defaultWaitUntil()) : null;
-  const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
+  const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, planMode:(document.getElementById('fPlanMode').value==='par'?'par':'seq'), recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
   if(old){
     logChange(old, 'Titel', old.title, title);
     logChange(old, 'Bereich', areaById(old.area)?.name||'–', areaById(newArea)?.name||'–');
@@ -3112,6 +3128,7 @@ document.getElementById('btnOpenCal').addEventListener('click', ()=>openCalModal
 document.getElementById('btnCloseCal').addEventListener('click', ()=>document.getElementById('calModalBg').classList.remove('open'));
 document.getElementById('calModalBg').addEventListener('click', e=>{ if(e.target.id==='calModalBg') e.currentTarget.classList.remove('open'); });
 document.getElementById('ganttGrid').addEventListener('click', e=>{
+  const tg = e.target.closest('[data-gtoggle]'); if(tg){ const id=tg.dataset.gtoggle; if(ganttOpen.has(id)) ganttOpen.delete(id); else ganttOpen.add(id); renderGantt(); return; }
   const day = e.target.closest('[data-cal-day]'); if(day) openCalModal(day.dataset.calDay);
 });
 document.getElementById('apWeekly').addEventListener('change', e=>{ document.getElementById('apUntil').style.display = e.target.checked ? '' : 'none'; });
@@ -3478,19 +3495,50 @@ document.getElementById('fileImport').addEventListener('change', async e=>{
   e.target.value = '';
 });
 
+// Planung: Dringlichkeit bestimmt der Zieltermin (früheste Frist zuerst; bei gleichem Datum bzw. ohne Termin
+// die manuelle Reihenfolge). Modus je Aufgabe: "seq" (Standard) = am Stück abarbeiten, "par" = parallel -
+// jede Einheit (Allgemein bzw. Unteraufgabe) bekommt täglich nur den Anteil, der für ihre Frist nötig ist,
+// freie Restzeit wird danach in Fristreihenfolge aufgefüllt.
 function buildSchedule(horizonDays=120){
-  const tasks=schedulableTasks(), remaining={}, units={}; tasks.forEach(t=>{ remaining[t.id]=taskRemainingHours(t)*60; units[t.id]=taskUnits(t); });
-  const segments={}, dayCaps={}; tasks.forEach(t=>segments[t.id]={});
-  const now=new Date(), today=midnight(now);
-  for(let i=0;i<horizonDays;i++){
-    const day=new Date(today); day.setDate(today.getDate()+i); const ymd=toISODate(day);
-    // Feiertage/Abwesenheiten = 0, feste Termine mindern die Kapazität (siehe plannedSegments).
-    const cap = plannedCapacity(day);
-    dayCaps[ymd]=cap; if(cap<=0) continue;
-    let left=cap, used=0;
-    for(const t of tasks){ if(left<=0) break; const use=Math.min(remaining[t.id], eligibleMinutes(units[t.id],ymd), left); if(use>0){ consumeUnits(units[t.id],ymd,use); segments[t.id][ymd]={offset:used,minutes:use}; used+=use; remaining[t.id]-=use; left-=use; } }
+  const tasks=schedulableTasks(), NODUE='9999-12-31', remaining={}, units={}, prio={}, segments={}, unitSeg={}, dayCaps={};
+  tasks.forEach((t,i)=>{ prio[t.id]=i; remaining[t.id]=taskRemainingHours(t)*60; units[t.id]=taskUnits(t); segments[t.id]={}; unitSeg[t.id]={}; });
+  const now=new Date(), today=midnight(now), list=[];
+  for(let i=0;i<horizonDays;i++){ const day=new Date(today); day.setDate(today.getDate()+i); const ymd=toISODate(day); const cap=plannedCapacity(day); dayCaps[ymd]=cap; list.push({ymd,cap}); }
+  const wd=[]; let acc=0; list.forEach((x,i)=>{ if(x.cap>0) acc++; wd[i]=acc; });
+  const idxOf={}; list.forEach((x,i)=>idxOf[x.ymd]=i);
+  function workdaysFrom(i,due){ // verbleibende Arbeitstage ab Tag i bis einschließlich Frist (mind. 1)
+    if(!due || due>=list[list.length-1].ymd) return Math.max(1, wd[list.length-1]-(i>0?wd[i-1]:0));
+    let j=-1; for(let k=i;k<list.length;k++){ if(list[k].ymd<=due) j=k; else break; }
+    return j<i ? 1 : Math.max(1, wd[j]-(i>0?wd[i-1]:0));
   }
-  return {tasks,segments,dayCaps};
+  const dueOf=(t,u)=>u.dueDate||t.dueDate||NODUE;
+  const taskDue=t=>{ let d=t.dueDate||NODUE; units[t.id].forEach(u=>{ if(u.dueDate && u.dueDate<d) d=u.dueDate; }); return d; };
+  list.forEach((dayInfo,di)=>{
+    const {ymd,cap}=dayInfo; if(cap<=0) return;
+    const cand=[];
+    tasks.forEach(t=>{
+      const el=units[t.id].filter(u=>u.rem>0 && !(u.startDate && ymd<u.startDate)); if(!el.length) return;
+      if(t.planMode==='par') el.forEach(u=>cand.push({t,u,par:true,rank:dueOf(t,u),pr:prio[t.id],ix:u.idx}));
+      else cand.push({t,el,par:false,rank:taskDue(t),pr:prio[t.id],ix:0});
+    });
+    cand.sort((x,y)=> x.rank<y.rank?-1: x.rank>y.rank?1 : x.pr-y.pr || x.ix-y.ix);
+    let left=cap; const per={}, order=[];
+    const give=(t,u,m)=>{ if(m<=0) return 0; const x=Math.min(m,u.rem,left); if(x<=0) return 0; u.rem-=x; u.last=ymd; remaining[t.id]-=x; left-=x; if(!per[t.id]){ per[t.id]=new Map(); order.push(t); } per[t.id].set(u.key,(per[t.id].get(u.key)||0)+x); return x; };
+    for(const c of cand){ if(left<=0) break;
+      if(c.par){ give(c.t,c.u,c.u.rem/workdaysFrom(di,dueOf(c.t,c.u))); }
+      else { for(const u of c.el){ if(left<=0) break; give(c.t,u,u.rem); } } }
+    for(const c of cand){ if(left<=0) break; if(c.par) give(c.t,c.u,c.u.rem); }
+    // Tagesbalken: Reihenfolge nach Rang, Unterzeilen mit eigenem Versatz.
+    const rankOf={}; cand.forEach((c,k)=>{ if(rankOf[c.t.id]==null) rankOf[c.t.id]=k; });
+    order.sort((x,y)=>rankOf[x.id]-rankOf[y.id]);
+    let used=0;
+    for(const t of order){ const m=per[t.id]; let tot=0, cum=used; m.forEach(v=>tot+=v);
+      segments[t.id][ymd]={offset:used,minutes:tot};
+      for(const u of units[t.id]){ const v=m.get(u.key); if(!v) continue; (unitSeg[t.id][u.key]=unitSeg[t.id][u.key]||{})[ymd]={offset:cum,minutes:v}; cum+=v; }
+      used+=tot; }
+  });
+  const unitInfo={}; tasks.forEach(t=>{ unitInfo[t.id]=units[t.id].map(u=>({key:u.key,title:u.title,startDate:u.startDate,dueDate:u.dueDate,last:u.last||null,complete:u.rem<=0.5})); });
+  return {tasks,segments,unitSeg,unitInfo,dayCaps};
 }
 function shiftDate(date, range, n){ const d=new Date(date); if(range==='week') d.setDate(d.getDate()+n*7); else d.setMonth(d.getMonth()+n); return d; }
 function shiftAnchor(dir){ ganttAnchor = shiftDate(ganttAnchor, ganttRange, dir); }
@@ -3531,6 +3579,7 @@ document.querySelectorAll('#view-gantt .seg-toggle button').forEach(b=>b.addEven
 document.getElementById('btnGanttPrev').addEventListener('click',()=>{ shiftAnchor(-1); renderGantt(); });
 document.getElementById('btnGanttNext').addEventListener('click',()=>{ shiftAnchor(1); renderGantt(); });
 document.getElementById('btnGanttToday').addEventListener('click',()=>{ ganttAnchor=new Date(); renderGantt(); });
+document.getElementById('chkSubs').addEventListener('change', e=>{ showSubs=e.target.checked; try{ localStorage.setItem('gantt-subs', showSubs?'1':'0'); }catch(_){} renderGantt(); });
 document.getElementById('chkPast').addEventListener('change', async e=>{ showPast=e.target.checked; state.settings.showPast=showPast; await saveSettings(); renderGantt(); });
 document.getElementById('chkOnlyWorkdays').addEventListener('change', async e=>{ showOnlyWorkdays=e.target.checked; state.settings.showOnlyWorkdays=showOnlyWorkdays; await saveSettings(); renderGantt(); });
 function renderGantt(){
@@ -3539,9 +3588,11 @@ function renderGantt(){
   // wirkte die Checkbox angehakt, ohne dass die Vergangenheit tatsächlich angezeigt wurde
   // (erst ein Aus-/wieder Anschalten hat den "change"-Handler ausgelöst und synchronisiert).
   // Hier wird die Checkbox bei jedem Render explizit auf den echten Zustand gesetzt.
+  try{ if(localStorage.getItem('gantt-subs')==='1') showSubs=true; }catch(_){}
+  document.getElementById('chkSubs').checked = showSubs;
   document.getElementById('chkPast').checked = showPast;
   document.getElementById('chkOnlyWorkdays').checked = showOnlyWorkdays;
-  const days=ganttVisibleDays(ganttRange,ganttAnchor,showPast), today=midnight(new Date()), {tasks:futureTasks,segments,dayCaps}=buildSchedule(Math.max(120,days.length+30));
+  const days=ganttVisibleDays(ganttRange,ganttAnchor,showPast), today=midnight(new Date()), {tasks:futureTasks,segments,dayCaps,unitSeg}=buildSchedule(Math.max(120,days.length+30));
   let rows=futureTasks.slice(), pastLayout={}, pastSessions={};
   const pastDays = showPast ? days.filter(d=>d<today) : [];
   // Heute-Zelle bildet den ganzen Arbeitstag ab: links grau der bereits verstrichene Teil (exakte
@@ -3670,7 +3721,7 @@ function renderGantt(){
     const barPrefix = icons.length ? icons.map(x=>x[0]).join('') + ' ' : '';
     const iconsHtml = icons.length ? `<span class="gantt-icons">${icons.map(([c,tip])=>`<span title="${escapeAttr(tip)}">${c}</span>`).join('')}</span>` : '';
     const grip = isDoneOnly || t.isQuickLog ? '' : `<span class="gantt-grip" data-grip="${t.id}" title="Ziehen zum Umsortieren (ändert die Prioritätsreihenfolge)">⠿</span>`;
-    html+=`<div class="gantt-row-label ${zebra}" data-row-label="${r}" data-task="${t.id}" title="${escapeAttr(t.title)}" style="${isDoneOnly?'color:var(--ink-faint);text-decoration:line-through;':''}">${grip}${escapeHtml(t.title)}${iconsHtml}</div>`;
+    html+=`<div class="gantt-row-label ${zebra}" data-row-label="${r}" data-task="${t.id}" title="${escapeAttr(t.title)}" style="${isDoneOnly?'color:var(--ink-faint);text-decoration:line-through;':''}">${grip}${(!t.done && (t.subtasks||[]).some(x=>!x.done)) ? `<span class="gantt-toggle" data-gtoggle="${t.id}" title="Unteraufgaben ein-/ausblenden">${(showSubs||ganttOpen.has(String(t.id)))?'▾':'▸'}</span>` : ''}${escapeHtml(t.title)}${iconsHtml}</div>`;
     // Pro Tag der Balken-Ausschnitt dieser Aufgabe, getrennt nach Art (hist = gebucht, plan =
     // geplant) - die Heute-Zelle kann beides nebeneinander enthalten.
     const histInfo = days.map(d=>{
@@ -3728,6 +3779,24 @@ function renderGantt(){
       if(i===dueIdx) barHtml+=`<div class="gantt-deadline ${late?'late':''}" title="Deadline ${fmtDate(t.dueDate)}${late?' - laut Planung nicht rechtzeitig fertig':''}"></div>`;
       html+=`<div class="gantt-cell ${isToday?'today':''} ${isPast&&!showPast?'past':''} ${isPast&&showPast?'pastday':''} ${zebra} ${colCls[i]}" data-cell="${r}:${i}" style="grid-column:${3+i};">${barHtml}</div>`;
     });
+    // Unterzeilen: Zeitfenster (Start bis Ziel) als Band, geplante Arbeit als Balken, Fortschritt im Namen.
+    if(!t.done && (showSubs || ganttOpen.has(String(t.id)))){
+      (t.subtasks||[]).filter(x=>!x.done).forEach(sub=>{
+        const estH=parseHours(sub.estHours), spH=entitySpentHours(sub), prog=estH>0?Math.min(100,Math.round(spH/estH*100)):0;
+        const info=(pfT?.subs||[]).find(u=>u.key===sub.id), segU=unitSeg?.[t.id]?.[sub.id]||{};
+        const subLate=!!info?.late;
+        html+=`<div class="gantt-row-label gantt-sub-label ${zebra}" title="${escapeAttr(sub.title+(estH>0?` - ${fmtHours(spH)} von ${fmtHours(estH)} (${prog} %)`:''))}" style="--prog:${prog}%;">↳ ${escapeHtml(sub.title)}${subLate?' <span title="laut Planung nicht rechtzeitig fertig">🔥</span>':''}</div>`;
+        days.forEach((d,i)=>{ const ymd=toISODate(d), isT=sameDay(d,today), isPast=d<today;
+          let inner='';
+          const inWin=(!sub.startDate||ymd>=sub.startDate)&&(!sub.dueDate||ymd<=sub.dueDate);
+          if((sub.startDate||sub.dueDate) && inWin) inner+=`<div class="gantt-window ${subLate?'late':''}" title="${escapeAttr('Zeitfenster '+(sub.startDate?fmtDate(sub.startDate):'…')+' bis '+(sub.dueDate?fmtDate(sub.dueDate):'…'))}"></div>`;
+          const sg=segU[ymd], cap=dayCaps[ymd]||0;
+          if(sg && cap>0 && !isPast){ const isTd=ymd===todayYmd&&todayFull>0, full=isTd?todayFull:cap, st=isTd?todayPlanStart:0;
+            inner+=`<div class="gantt-bar" style="left:${(st+sg.offset)/full*100}%;width:${Math.max(2,sg.minutes/full*100)}%;background-color:${color}" title="${escapeAttr(sub.title+': '+fmtHours(sg.minutes/60)+' geplant')}"></div>`; }
+          if(sub.dueDate && ymd===sub.dueDate) inner+=`<div class="gantt-deadline sub ${subLate?'late':''}" title="${escapeAttr('Teilziel '+fmtDate(sub.dueDate))}"></div>`;
+          html+=`<div class="gantt-cell gantt-sub-cell ${isT?'today':''} ${isPast&&!showPast?'past':''} ${zebra} ${colCls[i]}" style="grid-column:${3+i};">${inner}</div>`; });
+      });
+    }
   });
   // Übergänge: endet eine Aufgabe exakt dort, wo eine andere beginnt, verbindet ein senkrechter Streifen beide.
   ganttLinkDefs = [];
@@ -5444,7 +5513,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=8, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=9, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
