@@ -627,6 +627,8 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .prog-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:1px 9px}
 .prog-chip.unset{color:var(--ink-faint);border-style:dashed}
 .prog-chip .pb{width:48px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}.prog-chip .pb i{display:block;height:100%;background:var(--accent)}
+.prog-mini{font-size:11.5px;color:var(--ink-muted);cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:0 7px;white-space:nowrap}.prog-mini.unset{color:var(--ink-faint);border-style:dashed}
+.sub-dates input.sub-prog{flex:0 0 90px;width:90px;accent-color:var(--accent)}
 .nb-edit:empty:before{content:attr(data-ph);color:var(--ink-faint)}
 .nb-edrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink-faint)}
 .nb-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:14px}
@@ -1137,7 +1139,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         </div>
         <div class="field d-only" id="fProgWrap">
           <label>Fortschritt gesamt (Bauchgefühl, unabhängig von Stunden)</label>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="range" id="fProg" min="0" max="100" step="5" value="0" style="flex:1;min-width:140px"><input type="text" id="fProgNum" inputmode="numeric" style="width:54px;text-align:right"> %<button type="button" class="btn small ghost" id="fProgSug">Vorschlag übernehmen</button></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="range" id="fProg" min="0" max="100" step="5" value="0" style="flex:1;min-width:140px"><input type="text" id="fProgNum" inputmode="numeric" style="width:54px;text-align:right"> %<button type="button" class="btn small ghost" id="fProgSug">Automatisch aus Unteraufgaben</button></div>
           <div class="hint" id="fProgHint"></div>
         </div>
         <div class="tm-sec">
@@ -1596,6 +1598,7 @@ function migrateState(){
     t.subtasks.forEach(s=>{
       if(s.estMinutes!=null && s.estHours==null){ s.estHours = Math.round((s.estMinutes/60)*100)/100; delete s.estMinutes; }
       s.estHours = parseHours(s.estHours);
+      s.progress = (s.progress!=null && Number.isFinite(Number(s.progress))) ? Math.max(0,Math.min(100,Math.round(Number(s.progress)))) : null;
       s.done = !!s.done;
       s.doneAt = s.doneAt || null;
       s.startDate = s.startDate || null; s.dueDate = s.dueDate || null;
@@ -1750,13 +1753,19 @@ function fmtDateTimeShort(iso){ const d=new Date(iso); return `${pad(d.getDate()
 function progressSuggestion(subs){
   subs=(subs||[]).filter(x=>x&&String(x.title||'').trim()); if(!subs.length) return null;
   const est=subs.map(x=>parseHours(x.estHours)).filter(h=>h>0), avg=est.length?est.reduce((a,b)=>a+b,0)/est.length:1;
-  let tot=0, done=0, nDone=0; subs.forEach(x=>{ const w=parseHours(x.estHours)>0?parseHours(x.estHours):avg; tot+=w; if(x.done){ done+=w; nDone++; } });
-  return {pct:Math.round(done/tot*100), done:nDone, total:subs.length};
+  let tot=0, got=0, nDone=0; subs.forEach(x=>{ const w=parseHours(x.estHours)>0?parseHours(x.estHours):avg; tot+=w; got+=w*(x.done?100:(x.progress||0))/100; if(x.done) nDone++; });
+  return {pct:Math.round(got/tot*100), done:nDone, total:subs.length};
+}
+// Wirksamer Gesamtfortschritt: manuelle Schaetzung, sonst automatisch aus den Unteraufgaben.
+function taskProgress(t){
+  if(t.progress!=null) return {pct:t.progress, auto:false};
+  const sg=progressSuggestion(t.subtasks); return sg?{pct:sg.pct, auto:true}:null;
 }
 function progressChipHtml(t){
   if(t.done) return '';
-  const p=t.progress, at=t.progressAt?fmtDate(String(t.progressAt).slice(0,10)):'';
-  return p!=null ? `<span class="prog-chip" data-set-progress="${t.id}" title="Geschätzter Fortschritt${at?' (Stand '+at+')':''} - klicken zum Ändern"><span class="pb"><i style="width:${p}%"></i></span>${p} %</span>` : `<span class="prog-chip unset" data-set-progress="${t.id}" title="Fortschritt schätzen">Fortschritt schätzen</span>`;
+  const tp=taskProgress(t), at=t.progressAt?fmtDate(String(t.progressAt).slice(0,10)):'';
+  if(!tp) return `<span class="prog-chip unset" data-set-progress="${t.id}" title="Fortschritt schätzen">Fortschritt schätzen</span>`;
+  return `<span class="prog-chip" data-set-progress="${t.id}" title="${tp.auto?'Aus den Unteraufgaben berechnet':'Geschätzter Fortschritt'+(at?' (Stand '+at+')':'')} - klicken zum Ändern"><span class="pb"><i style="width:${tp.pct}%"></i></span>${tp.auto?'≈ ':''}${tp.pct} %</span>`;
 }
 function logChange(t, field, fromLabel, toLabel){
   if(fromLabel === toLabel) return;
@@ -2420,6 +2429,7 @@ function subtaskRowsHtml(t){
     <div class="subtask-row">
       <input type="checkbox" data-sub="${s.id}" data-task="${t.id}" ${s.done?'checked':''} ${t.done?'disabled':''}>
       <span class="${s.done?'done':''}">${escapeHtml(s.title)}</span>
+      ${(!t.done&&!s.done)?`<span class="prog-mini ${s.progress==null?'unset':''}" data-set-sub-progress="${s.id}" data-task="${t.id}" title="Fortschritt dieser Unteraufgabe schätzen">${s.progress==null?'% ?':s.progress+' %'}</span>`:''}
       <span class="subtask-time ${sOver?'over':''}" ${sOver?`title="${escapeAttr(`${fmtHours(sSpent)} erfasst, ${fmtHours(sEst)} geschätzt`)}"`:''}>${fmtHours(sSpent)} / ${fmtHours(sEst)}</span>
       ${s.timerRunning?`<span class="timer-chip running" data-sub-timer="${s.id}"><span class="dot"></span><span class="tval" data-sub-timer-val="${s.id}">${fmtHMS(s.timeSpentSec||0)}</span></span>`:''}
       ${canTime?`<span class="miniBtn" data-toggle-sub-timer="${s.id}" title="${s.timerRunning?'Pausieren':'Starten'}">${s.timerRunning?'⏸':'▶'}</span>`:''}
@@ -2527,13 +2537,15 @@ document.getElementById('statusChips').addEventListener('click', e=>{
   renderList();
 });
 function progHintRefresh(){
-  const h=document.getElementById('fProgHint'); if(!h) return; const sl=document.getElementById('fProg'), sug=progressSuggestion(editSubtasks), t=editingTaskId?state.tasks.find(x=>x.id===editingTaskId):null;
-  const at=t&&t.progressAt?' · zuletzt geschätzt am '+fmtDate(String(t.progressAt).slice(0,10)):'';
-  h.textContent=(sl.dataset.had||sl.dataset.touched?'':'Noch nicht geschätzt. ')+(sug?'Vorschlag aus Unteraufgaben: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt, nach geplanter Dauer gewichtet)':'Keine Unteraufgaben – reine Schätzung.')+at;
+  const h=document.getElementById('fProgHint'); if(!h) return; const sl=document.getElementById('fProg'), num=document.getElementById('fProgNum'), sug=progressSuggestion(editSubtasks), t=editingTaskId?state.tasks.find(x=>x.id===editingTaskId):null;
+  const manual=!!(sl.dataset.touched||(sl.dataset.had&&!sl.dataset.auto));
+  if(!manual && sug){ sl.value=sug.pct; num.value=sug.pct; }
+  const at=(t&&t.progressAt&&manual)?' · zuletzt geschätzt am '+fmtDate(String(t.progressAt).slice(0,10)):'';
+  h.textContent=(sug?(manual?'Manuell geschätzt. ':'Automatisch aus den Unteraufgaben. ')+'Berechnet: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt, Teilfortschritte nach geplanter Dauer gewichtet)':(manual||sl.dataset.had?'':'Noch nicht geschätzt. ')+'Keine Unteraufgaben – reine Schätzung.')+at;
 }
-document.getElementById('fProg').addEventListener('input',e=>{ e.target.dataset.touched='1'; document.getElementById('fProgNum').value=e.target.value; progHintRefresh(); });
-document.getElementById('fProgNum').addEventListener('input',e=>{ const v=Math.max(0,Math.min(100,parseInt(String(e.target.value).replace(/[^\d]/g,''),10)||0)); const sl=document.getElementById('fProg'); sl.value=v; sl.dataset.touched='1'; });
-document.getElementById('fProgSug').addEventListener('click',()=>{ const sug=progressSuggestion(editSubtasks); if(!sug) return; const sl=document.getElementById('fProg'); sl.value=sug.pct; sl.dataset.touched='1'; document.getElementById('fProgNum').value=sug.pct; });
+document.getElementById('fProg').addEventListener('input',e=>{ e.target.dataset.touched='1'; e.target.dataset.auto=''; document.getElementById('fProgNum').value=e.target.value; progHintRefresh(); });
+document.getElementById('fProgNum').addEventListener('input',e=>{ const v=Math.max(0,Math.min(100,parseInt(String(e.target.value).replace(/[^\d]/g,''),10)||0)); const sl=document.getElementById('fProg'); sl.value=v; sl.dataset.touched='1'; sl.dataset.auto=''; });
+document.getElementById('fProgSug').addEventListener('click',()=>{ if(!progressSuggestion(editSubtasks)) return; const sl=document.getElementById('fProg'); sl.dataset.touched=''; sl.dataset.auto='1'; progHintRefresh(); });
 document.getElementById('taskModalBg').addEventListener('click',()=>setTimeout(progHintRefresh,0));
 async function handleTaskCardClick(e){
   const del=e.target.closest('[data-del]'), edit=e.target.closest('[data-edit]'), done=e.target.closest('[data-toggle-done]'), timer=e.target.closest('[data-toggle-timer]'), addTime=e.target.closest('[data-add-time]');
@@ -2549,12 +2561,21 @@ async function handleTaskCardClick(e){
     document.querySelector('.nav-btn[data-view="list"]').click();
     renderFilters(); document.getElementById('filterTag').value = tagBadge.dataset.filterTag; renderList(); return;
   }
+  const setSubProg = e.target.closest('[data-set-sub-progress]');
+  if(setSubProg){
+    const t=state.tasks.find(x=>x.id===setSubProg.dataset.task), sb=t&&t.subtasks.find(x=>x.id===setSubProg.dataset.setSubProgress); if(!sb) return;
+    const txt=prompt('Wie viel von „'+sb.title+'“ ist erledigt? (0–100 %)', sb.progress!=null?sb.progress:''); if(txt===null) return;
+    let nv=null; if(String(txt).trim()!==''){ const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return; nv=Math.max(0,Math.min(100,v)); }
+    logChange(t,'Fortschritt Unteraufgabe „'+sb.title+'“',sb.progress!=null?sb.progress+' %':'–',nv!=null?nv+' %':'–'); sb.progress=nv; await saveTasks(); renderAll(); return;
+  }
   const setProg = e.target.closest('[data-set-progress]');
   if(setProg){
     const t=state.tasks.find(x=>x.id===setProg.dataset.setProgress); if(!t) return;
     const sug=progressSuggestion(t.subtasks);
-    const txt=prompt('Wie viel von „'+t.title+'“ ist erledigt? (0–100 %)'+(sug?'\nVorschlag aus Unteraufgaben: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt)':''), t.progress!=null?t.progress:(sug?sug.pct:''));
-    if(txt===null) return; const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return;
+    const txt=prompt('Wie viel von „'+t.title+'“ ist erledigt? (0–100 %)'+(sug?'\nAus Unteraufgaben berechnet: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt). Feld leeren = automatisch.':''), t.progress!=null?t.progress:(sug?sug.pct:''));
+    if(txt===null) return;
+    if(String(txt).trim()===''){ if(sug){ logChange(t,'Fortschritt (Schätzung)',t.progress!=null?t.progress+' %':'automatisch','automatisch'); t.progress=null; t.progressAt=null; await saveTasks(); renderAll(); } return; }
+    const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return;
     const nv=Math.max(0,Math.min(100,v)); logChange(t,'Fortschritt (Schätzung)',t.progress!=null?t.progress+' %':'–',nv+' %');
     t.progress=nv; t.progressAt=new Date().toISOString(); await saveTasks(); renderAll(); return;
   }
@@ -2618,7 +2639,7 @@ function openTaskModal(id){
   document.getElementById('fPriority').value = t ? t.priority : 'mid';
   document.getElementById('fEstHours').value = t && t.estHours ? String(t.estHours).replace('.',',') : '';
   document.getElementById('fStatus').value = t ? (t.manualStatus || '') : '';
-  { const pr=t&&t.progress!=null?t.progress:0, sl=document.getElementById('fProg'); sl.value=pr; sl.dataset.touched=''; sl.dataset.had=(t&&t.progress!=null)?'1':''; document.getElementById('fProgNum').value=pr; progHintRefresh(); }
+  { const pr=t&&t.progress!=null?t.progress:0, sl=document.getElementById('fProg'); sl.value=pr; sl.dataset.touched=''; sl.dataset.auto=''; sl.dataset.had=(t&&t.progress!=null)?'1':''; document.getElementById('fProgNum').value=pr; progHintRefresh(); }
   document.getElementById('fWaitInputs').innerHTML = waitDeadlineInputsHtml(t && t.manualStatus==='wartet_auf_info' ? waitDueDate(t) : defaultWaitUntil());
   updateWaitUI();
   editTags = t ? (t.tags||[]).slice() : [];
@@ -2899,7 +2920,7 @@ function renderSubList(){
       <span class="est-cell"><input type="text" class="sub-hours" inputmode="decimal" data-hours="${i}" value="${String(s.estHours||0).replace('.',',')}"><span style="color:var(--ink-faint);font-size:11px;">h</span></span>
       <span class="num d-only" data-live-spent="${s.id}"></span><span class="num d-only" data-live-rest="${s.id}"></span><span class="d-only" data-live-timer="${s.id}"></span>
       <span class="miniBtn" data-rm="${i}" title="Entfernen">✕</span>
-      <div class="sub-dates"><span>Geplant:</span><input type="date" data-sdate="start" data-i="${i}" value="${s.startDate||''}" title="Geplanter Start der Unteraufgabe"><span>bis</span><input type="date" data-sdate="due" data-i="${i}" value="${s.dueDate||''}" title="Zieltermin der Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)">${(!s.done&&s.dueDate&&s.dueDate<toISODate(new Date()))?'<span class="sub-late">überfällig</span>':''}</div>
+      <div class="sub-dates"><span>Geplant:</span><input type="date" data-sdate="start" data-i="${i}" value="${s.startDate||''}" title="Geplanter Start der Unteraufgabe"><span>bis</span><input type="date" data-sdate="due" data-i="${i}" value="${s.dueDate||''}" title="Zieltermin der Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)">${(!s.done&&s.dueDate&&s.dueDate<toISODate(new Date()))?'<span class="sub-late">überfällig</span>':''}<span>Fortschritt:</span><input type="range" class="sub-prog" min="0" max="100" step="5" data-sprog="${i}" value="${s.done?100:(s.progress||0)}" ${s.done?'disabled':''} title="Geschätzter Fortschritt der Unteraufgabe"><span data-sprog-val="${i}">${s.done?'100 %':(s.progress!=null?s.progress+' %':'–')}</span></div>
     </div>`).join('');
   fitSubTitles();
   toggleEstVisibility();
@@ -2930,6 +2951,8 @@ document.getElementById('subList').addEventListener('input', e=>{
   const t=e.target.closest('[data-title]'), h=e.target.closest('[data-hours]');
   if(t){ editSubtasks[Number(t.dataset.title)].title = t.value.replace(/\s*\n\s*/g,' '); autoResize(t); }
   if(h) editSubtasks[Number(h.dataset.hours)].estHours = parseHours(h.value);
+  const sp=e.target.closest('[data-sprog]');
+  if(sp){ const i=Number(sp.dataset.sprog); editSubtasks[i].progress=parseInt(sp.value,10)||0; const lb=document.querySelector('[data-sprog-val="'+i+'"]'); if(lb) lb.textContent=editSubtasks[i].progress+' %'; progHintRefresh(); }
   toggleEstVisibility();
 });
 function addSubFromInputs(){
@@ -2963,7 +2986,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   // Timer oder wurde Zeit nachgetragen, würde die Kopie diese Zeit sonst wieder überschreiben.
   const liveSubs = new Map((old ? old.subtasks : []).map(s=>[s.id, s]));
   const newClient = document.getElementById('fClient').value.trim(), newStartDate = document.getElementById('fStartDate').value || null;
-  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, startDate:s.startDate||null, dueDate:s.dueDate||null, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
+  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, progress:(s.progress!=null?s.progress:null), startDate:s.startDate||null, dueDate:s.dueDate||null, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
   const recurFreq = document.getElementById('fRecurFreq').value;
   const newRecurrence = recurFreq ? {
     freq: recurFreq,
@@ -2976,7 +2999,9 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   const waitVal = document.querySelector('#fWaitInputs [data-wait-date]')?.value;
   const newWaitUntil = newManualStatus==='wartet_auf_info' ? (/^\d{4}-\d{2}-\d{2}$/.test(waitVal||'') ? waitVal : defaultWaitUntil()) : null;
   const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
-  { const sl=document.getElementById('fProg'); if(sl.dataset.touched){ data.progress=Math.max(0,Math.min(100,parseInt(sl.value,10)||0)); data.progressAt=new Date().toISOString(); if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'–',data.progress+' %'); } }
+  { const sl=document.getElementById('fProg'); const sg=progressSuggestion(editSubtasks);
+    if(sl.dataset.auto && sg){ data.progress=null; data.progressAt=null; if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'automatisch','automatisch'); }
+    else if(sl.dataset.touched){ data.progress=Math.max(0,Math.min(100,parseInt(sl.value,10)||0)); data.progressAt=new Date().toISOString(); if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'–',data.progress+' %'); } }
   if(old){
     logChange(old, 'Titel', old.title, title);
     logChange(old, 'Bereich', areaById(old.area)?.name||'–', areaById(newArea)?.name||'–');
@@ -3429,7 +3454,7 @@ document.getElementById('btnExportExcel').addEventListener('click', ()=>{
     {Kennzahl:'Erledigt gesamt', Wert:realTasks.filter(t=>t.done).length},
     {Kennzahl:'Erstellt am', Wert:new Date().toLocaleString('de-DE')}
   ];
-  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Fortschritt (geschätzt, %)':t.done?100:(t.progress!=null?t.progress:''),'Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
+  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Fortschritt (geschätzt, %)':t.done?100:(taskProgress(t)?taskProgress(t).pct:''),'Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
   const subRows=[]; realTasks.forEach(t=>{ if(t.subtasks.length && (parseHours(t.estHours)>0 || entitySpentHours(t)>0)) subRows.push({Aufgabe:t.title,Unteraufgabe:'Allgemein','Geschätzt (Std.)':parseHours(t.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein'}); t.subtasks.forEach(s=>subRows.push({Aufgabe:t.title,Unteraufgabe:s.title,'Geschätzt (Std.)':parseHours(s.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(s)*100)/100,Erledigt:s.done?'Ja':'Nein'})); });
   const sourceLabel={timer:'Timer',manual:'Manuell',auto:'Auto'};
   const eventRows=[];
@@ -5590,7 +5615,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=14, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=15, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
