@@ -162,6 +162,9 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 .gantt-row-label{cursor:default;}
 .gantt-deadline{--dl:var(--mid);position:absolute;top:0;bottom:0;right:-3px;width:6px;z-index:2;cursor:default;}
 .gantt-deadline.late{--dl:var(--high);}
+.gantt-deadline.sub{right:-1px;}
+.gantt-deadline.sub::after{width:2px;opacity:.85;}
+.gantt-deadline.sub::before{left:3px;border-top-width:4px;border-bottom-width:4px;border-left-width:6px;}
 .gantt-deadline::after{content:'';position:absolute;left:1px;width:3px;top:0;bottom:0;background:var(--dl);box-shadow:0 0 0 1px rgba(255,255,255,.7);}
 .gantt-deadline::before{content:'';position:absolute;left:4px;top:1px;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:9px solid var(--dl);z-index:1;}
 .gantt-bar.late{--late:#e11d0f;--sl:-2px 0 0 var(--late),inset 2px 0 0 #fff;--sr:2px 0 0 var(--late),inset -2px 0 0 #fff;box-shadow:0 -2px 0 var(--late),0 2px 0 var(--late),inset 0 2px 0 #fff,inset 0 -2px 0 #fff,var(--sl),var(--sr);}
@@ -249,6 +252,11 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 /* Detailfenster: Unteraufgaben als Tabelle mit gebuchter Zeit und Rest je Zeile */
 .tm.detail .sub-list{gap:0;margin-bottom:0;}
 .tm.detail .sub-item{display:grid;grid-template-columns:16px 18px minmax(0,1fr) 74px 58px 58px 24px 16px;gap:6px;background:none;border-radius:0;border-top:1px dashed var(--line);padding:5px 0;}
+.sub-item{flex-wrap:wrap;}
+.sub-dates{flex:0 0 100%;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-muted);padding:0 0 0 38px;box-sizing:border-box;}
+.sub-dates input[type=date]{font-size:11.5px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink);font-family:inherit;}
+.sub-dates .sub-late{color:var(--high);font-weight:700;}
+.tm.detail .sub-dates{grid-column:1/-1;padding-left:34px;}
 .tm.detail .sub-item .num{text-align:right;font-family:var(--font-mono);font-size:12.5px;white-space:nowrap;}
 .tm.detail .sub-item .num.over{color:var(--high);font-weight:700;}
 .tm.detail .sub-item input.sub-hours{flex:1 1 auto;width:100%;min-width:0;text-align:right;}
@@ -1563,6 +1571,7 @@ function migrateState(){
       s.estHours = parseHours(s.estHours);
       s.done = !!s.done;
       s.doneAt = s.doneAt || null;
+      s.startDate = s.startDate || null; s.dueDate = s.dueDate || null;
       s.timeSpentSec = Math.max(0, Number(s.timeSpentSec)||0);
       s.timeLog = s.timeLog || {};
       s.timeEvents = Array.isArray(s.timeEvents) ? s.timeEvents : [];
@@ -2119,7 +2128,50 @@ function capacityFromNowUntil(untilDate){
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) total += plannedCapacity(d);
   return total;
 }
+// Arbeitseinheiten einer Aufgabe (Allgemeinzeit + offene Unteraufgaben) in Planungsreihenfolge:
+// Einheiten mit Zieltermin zuerst (früheste Frist zuerst), danach die ohne Termin in Listenreihenfolge.
+function taskUnits(t){
+  const u=[], own=Math.max(0, parseHours(t.estHours)-entitySpentHours(t))*60;
+  if(own>0) u.push({key:'own', title:'Allgemein', rem:own, startDate:null, dueDate:null, idx:-1});
+  (t.subtasks||[]).forEach((s,i)=>{ if(s.done) return; const rem=Math.max(0, parseHours(s.estHours)-entitySpentHours(s))*60;
+    if(rem>0) u.push({key:s.id, title:s.title, rem, startDate:s.startDate||null, dueDate:s.dueDate||null, idx:i}); });
+  return u.sort((a,b)=> (a.dueDate?0:1)-(b.dueDate?0:1) || ((a.dueDate&&b.dueDate&&a.dueDate!==b.dueDate)?(a.dueDate<b.dueDate?-1:1):0) || a.idx-b.idx);
+}
+// Verteilt die an einem Tag eingeplanten Minuten auf die startbereiten Einheiten (Startdatum der Unteraufgabe).
+function consumeUnits(units, ymd, minutes){
+  let used=0;
+  for(const u of units){ if(minutes-used<=0) break; if(u.rem<=0 || (u.startDate && ymd<u.startDate)) continue; const x=Math.min(u.rem, minutes-used); u.rem-=x; used+=x; u.last=ymd; }
+  return used;
+}
+function eligibleMinutes(units, ymd){ return units.reduce((s,u)=> s + ((u.rem>0 && !(u.startDate && ymd<u.startDate)) ? u.rem : 0), 0); }
+// Planstand je Einheit aus den eingeplanten Tagen einer Aufgabe (gleiche Verteilung wie in buildSchedule).
+function taskUnitFinish(t, seg){
+  const units=taskUnits(t); Object.keys(seg||{}).sort().forEach(d=>consumeUnits(units, d, seg[d].minutes));
+  return units.map(u=>({key:u.key, title:u.title, startDate:u.startDate, dueDate:u.dueDate, last:u.last||null, complete:u.rem<=0.5}));
+}
+// Risiko aus den Zielterminen der Unteraufgaben (unabhängig vom Ziel der Gesamtaufgabe).
+function subRiskInfo(t){
+  const todayYmd=toISODate(new Date()), dated=taskUnits(t).filter(u=>u.dueDate);
+  if(!dated.length) return null;
+  const pf = t.isQuickLog ? null : plannedFinish(t);
+  let warn=null;
+  for(const u of dated){
+    if(u.dueDate<todayYmd) return {level:'blocked', label:'Teilziel überfällig', title:`„${u.title}“ war bis ${fmtDate(u.dueDate)} geplant und ist noch offen.`};
+    const needH=dated.filter(x=>x.dueDate<=u.dueDate).reduce((s,x)=>s+x.rem,0)/60;
+    const availH=capacityFromNowUntil(new Date(u.dueDate+'T23:59:59'))/60;
+    if(availH<needH) return {level:'blocked', label:'Teilziel kaum erreichbar', title:`„${u.title}“: bis ${fmtDate(u.dueDate)} sind ${fmtHours(needH)} nötig (inkl. früher fälliger Teile), aber nur ${fmtHours(availH)} Arbeitszeit verfügbar.`};
+    if(!warn && availH<needH*2) warn={level:'warn', label:'Teilziel knapp', title:`„${u.title}“: bis ${fmtDate(u.dueDate)} ${fmtHours(needH)} nötig, ${fmtHours(availH)} verfügbar - wenig Puffer.`};
+  }
+  const sl = pf && pf.subLate;
+  if(sl) return {level:'blocked', label:'Teilziel kaum erreichbar', title: sl.last && sl.complete ? `Laut Planung wird „${sl.title}“ erst am ${fmtDate(sl.last)} fertig, Teilziel ${fmtDate(sl.dueDate)}.` : `Laut Planung wird „${sl.title}“ nicht bis ${fmtDate(sl.dueDate)} fertig.`};
+  return warn;
+}
 function riskInfo(t){
+  if(t.done) return null;
+  const rank={blocked:2, warn:1}, a=taskRiskInfo(t), b=subRiskInfo(t);
+  return (a && b) ? (rank[b.level]>rank[a.level] ? b : a) : (a||b||null);
+}
+function taskRiskInfo(t){
   if(t.done || !t.dueDate) return null;
   const remH = taskRemainingHours(t);
   if(remH<=0) return null;
@@ -2153,7 +2205,8 @@ function plannedFinish(t, sched){
   // Reicht der Planungshorizont nicht, zählt das nur als "zu spät", wenn der Termin innerhalb liegt.
   const horizonEnd = Object.keys(s.dayCaps||{}).sort().pop() || '';
   const late = !t.done && !!t.dueDate && taskRemainingHours(t)>0 && ((!complete && t.dueDate <= horizonEnd) || (!!last && last > t.dueDate));
-  return {last, complete, late};
+  const subs = t.done ? [] : taskUnitFinish(t, seg).filter(u=>u.dueDate).map(u=>Object.assign(u,{late: (!u.complete && u.dueDate<=horizonEnd) || (!!u.last && u.last>u.dueDate)}));
+  return {last, complete, late, subs, subLate: subs.find(u=>u.late)||null};
 }
 
 function renderAll(){
@@ -2360,7 +2413,7 @@ function taskCardHtml(t, opts){
         ${t.done?'':`<span class="badge clickable ${prioClass(t.priority)}" title="Priorität ändern" data-open-priority="${t.id}">${prioLabel(t.priority)}</span>`}
         ${status?`<span class="badge clickable status-${status}" title="Status ändern" data-open-status="${t.id}">${STATUS_META[status].label}</span>`:''}
         ${t.cancelled?`<span class="badge status-abgebrochen">Abgebrochen</span>`:''}
-        ${t.dueDate?`<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>`:''}
+        ${t.dueDate?`<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>`:''}${subDueBadge(t)}
         ${risk?`<span class="badge risk-${risk.level}" title="${escapeAttr(risk.title)}">! ${risk.label}</span>`:''}
         ${over?`<span class="badge time-over" title="${escapeAttr(`${fmtHours(spent)} erfasst, ${fmtHours(est)} geschätzt (+${fmtHours(spent-est)})`)}">⏱ Zeit überschritten</span>`:''}
         ${status==='wartet_auf_info'?(()=>{ const wd=waitDueDate(t), due=wd<=toISODate(new Date()); return `<span class="badge ${due?'risk-blocked':'due'}" title="Nachhak-Frist - ab dann erinnert die App ans Nachhaken">${waitBadgeText(wd)}</span>`; })():''}
@@ -2601,7 +2654,7 @@ function renderTaskModalHead(){
     area ? `<span class="badge area" style="background:${area.color}22;color:${area.color}">${escapeHtml(area.name)}</span>` : '',
     `<span class="badge ${prioClass(t.priority)}">${prioLabel(t.priority)}</span>`,
     status ? `<span class="badge status-${status}">${STATUS_META[status].label}</span>` : (t.cancelled ? '<span class="badge status-abgebrochen">Abgebrochen</span>' : '<span class="badge status-erledigt">Erledigt</span>'),
-    t.dueDate ? `<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>` : '',
+    t.dueDate ? `<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>` : '', subDueBadge(t),
     risk ? `<span class="badge risk-${risk.level}" title="${escapeAttr(risk.title)}">! ${risk.label}</span>` : '',
     over ? '<span class="badge time-over">⏱ Zeit überschritten</span>' : '',
     status==='wartet_auf_info' ? `<span class="badge due">${waitBadgeText(waitDueDate(t))}</span>` : '',
@@ -2774,6 +2827,9 @@ function toggleEstVisibility(){
   document.getElementById('fEstQuickWrap').style.display = editSubtasks.length ? 'none' : '';
   renderMoreHint(); refreshTaskModalLive();
 }
+// Nächster offener Zieltermin einer Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)
+function nextSubDue(t){ let best=null; for(const s of (t.subtasks||[])) if(!s.done && s.dueDate && (!best || s.dueDate<best.dueDate)) best=s; return best; }
+function subDueBadge(t){ const b=nextSubDue(t); if(!b) return ''; const late=b.dueDate<toISODate(new Date()); return `<span class="badge due" title="${escapeAttr('Unteraufgabe: '+b.title)}"${late?' style="color:var(--high);font-weight:700;"':''}>Teilziel: ${fmtDate(b.dueDate)}</span>`; }
 function renderSubList(){
   document.getElementById('subList').innerHTML = editSubtasks.map((s,i)=>`
     <div class="sub-item ${s.done?'done':''}" data-idx="${i}">
@@ -2783,6 +2839,7 @@ function renderSubList(){
       <span class="est-cell"><input type="text" class="sub-hours" inputmode="decimal" data-hours="${i}" value="${String(s.estHours||0).replace('.',',')}"><span style="color:var(--ink-faint);font-size:11px;">h</span></span>
       <span class="num d-only" data-live-spent="${s.id}"></span><span class="num d-only" data-live-rest="${s.id}"></span><span class="d-only" data-live-timer="${s.id}"></span>
       <span class="miniBtn" data-rm="${i}" title="Entfernen">✕</span>
+      <div class="sub-dates"><span>Geplant:</span><input type="date" data-sdate="start" data-i="${i}" value="${s.startDate||''}" title="Geplanter Start der Unteraufgabe"><span>bis</span><input type="date" data-sdate="due" data-i="${i}" value="${s.dueDate||''}" title="Zieltermin der Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)">${(!s.done&&s.dueDate&&s.dueDate<toISODate(new Date()))?'<span class="sub-late">überfällig</span>':''}</div>
     </div>`).join('');
   fitSubTitles();
   toggleEstVisibility();
@@ -2798,6 +2855,11 @@ document.getElementById('subList').addEventListener('click', e=>{
   if(rm){ editSubtasks.splice(Number(rm.dataset.rm),1); renderSubList(); }
 });
 document.getElementById('subList').addEventListener('change', e=>{
+  const dt = e.target.closest('[data-sdate]');
+  if(dt){ const sub = editSubtasks[Number(dt.dataset.i)]; if(!sub) return;
+    sub[dt.dataset.sdate==='start'?'startDate':'dueDate'] = dt.value || null;
+    if(sub.startDate && sub.dueDate && sub.dueDate<sub.startDate){ if(dt.dataset.sdate==='start') sub.dueDate = sub.startDate; else sub.startDate = sub.dueDate; }
+    renderSubList(); return; }
   const cb = e.target.closest('[data-sub-done]'); if(!cb) return;
   const sub = editSubtasks[Number(cb.dataset.subDone)]; if(!sub) return;
   sub.done = cb.checked; sub.doneAt = sub.done ? (sub.doneAt || Date.now()) : null;
@@ -2813,7 +2875,7 @@ document.getElementById('subList').addEventListener('input', e=>{
 function addSubFromInputs(){
   const title=document.getElementById('subTitleInput').value.trim(), hrs=parseHours(document.getElementById('subHoursInput').value);
   if(!title) return false;
-  editSubtasks.push({id:uid(), title, estHours:hrs, done:false, doneAt:null, timeSpentSec:0, timerRunning:false, timerLastTick:null, lastActivityAt:null, timeLog:{}, timeEvents:[]});
+  editSubtasks.push({id:uid(), title, estHours:hrs, startDate:null, dueDate:null, done:false, doneAt:null, timeSpentSec:0, timerRunning:false, timerLastTick:null, lastActivityAt:null, timeLog:{}, timeEvents:[]});
   document.getElementById('subTitleInput').value=''; document.getElementById('subHoursInput').value='';
   return true;
 }
@@ -2841,7 +2903,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   // Timer oder wurde Zeit nachgetragen, würde die Kopie diese Zeit sonst wieder überschreiben.
   const liveSubs = new Map((old ? old.subtasks : []).map(s=>[s.id, s]));
   const newClient = document.getElementById('fClient').value.trim(), newStartDate = document.getElementById('fStartDate').value || null;
-  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
+  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, startDate:s.startDate||null, dueDate:s.dueDate||null, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
   const recurFreq = document.getElementById('fRecurFreq').value;
   const newRecurrence = recurFreq ? {
     freq: recurFreq,
@@ -3417,7 +3479,7 @@ document.getElementById('fileImport').addEventListener('change', async e=>{
 });
 
 function buildSchedule(horizonDays=120){
-  const tasks=schedulableTasks(), remaining={}; tasks.forEach(t=>remaining[t.id]=taskRemainingHours(t)*60);
+  const tasks=schedulableTasks(), remaining={}, units={}; tasks.forEach(t=>{ remaining[t.id]=taskRemainingHours(t)*60; units[t.id]=taskUnits(t); });
   const segments={}, dayCaps={}; tasks.forEach(t=>segments[t.id]={});
   const now=new Date(), today=midnight(now);
   for(let i=0;i<horizonDays;i++){
@@ -3426,7 +3488,7 @@ function buildSchedule(horizonDays=120){
     const cap = plannedCapacity(day);
     dayCaps[ymd]=cap; if(cap<=0) continue;
     let left=cap, used=0;
-    for(const t of tasks){ if(left<=0) break; const use=Math.min(remaining[t.id],left); if(use>0){ segments[t.id][ymd]={offset:used,minutes:use}; used+=use; remaining[t.id]-=use; left-=use; } }
+    for(const t of tasks){ if(left<=0) break; const use=Math.min(remaining[t.id], eligibleMinutes(units[t.id],ymd), left); if(use>0){ consumeUnits(units[t.id],ymd,use); segments[t.id][ymd]={offset:used,minutes:use}; used+=use; remaining[t.id]-=use; left-=use; } }
   }
   return {tasks,segments,dayCaps};
 }
@@ -3650,7 +3712,9 @@ function renderGantt(){
       if(dueIdx>=0 && dueIdx===days.length-1 && toISODate(days[dueIdx])!==t.dueDate) dueIdx=-1;
     }
     // Strich rot, wenn die Planung nach der Deadline endet (Balken laufen darüber hinaus), sonst ruhig orange.
-    const late = !!plannedFinish(t, {segments, dayCaps})?.late;
+    const pfT = plannedFinish(t, {segments, dayCaps}), late = !!pfT?.late, subMarks = {};
+    (pfT?.subs||[]).forEach(u=>{ let k=-1; for(let i=0;i<days.length;i++){ if(toISODate(days[i])<=u.dueDate) k=i; else break; }
+      if(k>=0 && k===days.length-1 && toISODate(days[k])!==u.dueDate) k=-1; if(k>=0) (subMarks[k]=subMarks[k]||[]).push(u); });
     days.forEach((d,i)=>{ const isPast=d<today, isToday=sameDay(d,today); let barHtml = isToday ? todayOverlay : '';
       layers.forEach(({info, joinPrev, joinNext, labelAt})=>{
         const b=info[i]; if(!b) return;
@@ -3660,6 +3724,7 @@ function renderGantt(){
         const leftCss = joinPrev[i] ? `calc(0% - ${bw}px)` : `${b.left}%`, widthCss = joinPrev[i] ? `calc(${b.width}% + ${bw}px)` : `${b.width}%`;
         barHtml+=`<div class="gantt-bar ${b.kind==='hist'?'hist':''} ${waiting&&b.kind==='plan'?'waiting':''} ${joinPrev[i]?'jl':''} ${joinNext[i]?'jr':''} ${b.kind==='plan' && !t.done && t.dueDate && toISODate(d)>t.dueDate ? 'late' : ''}" style="left:${leftCss};width:${widthCss};background-color:${color}" title="${escapeAttr(b.tip)}"></div>${labelAt[i]||''}`;
       });
+      if(subMarks[i]) subMarks[i].forEach(u=>{ barHtml+=`<div class="gantt-deadline sub ${u.late?'late':''}" title="${escapeAttr('Teilziel '+fmtDate(u.dueDate)+': '+u.title+(u.late?' - laut Planung nicht rechtzeitig fertig':''))}"></div>`; });
       if(i===dueIdx) barHtml+=`<div class="gantt-deadline ${late?'late':''}" title="Deadline ${fmtDate(t.dueDate)}${late?' - laut Planung nicht rechtzeitig fertig':''}"></div>`;
       html+=`<div class="gantt-cell ${isToday?'today':''} ${isPast&&!showPast?'past':''} ${isPast&&showPast?'pastday':''} ${zebra} ${colCls[i]}" data-cell="${r}:${i}" style="grid-column:${3+i};">${barHtml}</div>`;
     });
@@ -4170,7 +4235,7 @@ window.addEventListener('resize', ()=>{ if(tourActive) positionTourStep(TOUR_STE
 function remindReference(t){ return Math.max(taskLastActivity(t), t.createdAt||0, t.remindedAt||0); }
 function holdCandidates(){
   const cutoff = workdayCountBack(new Date(), 4*weekWorkdays()), today = toISODate(new Date());
-  return sortedOpenTasks().filter(t=>!t.isQuickLog && computeStatus(t)!=='wartet_auf_info' && !(t.dueDate && t.dueDate>=today) && remindReference(t) < cutoff);
+  return sortedOpenTasks().filter(t=>!t.isQuickLog && computeStatus(t)!=='wartet_auf_info' && !(t.dueDate && t.dueDate>=today) && !(t.subtasks||[]).some(s=>!s.done && s.dueDate && s.dueDate>=today) && remindReference(t) < cutoff);
 }
 // Nachhak-Erinnerung für Aufgaben, die auf Info warten: ab ihrer Nachhak-Frist (waitUntil,
 // Standard eine Arbeitswoche nach Warte-Beginn bzw. letztem "Nachgehakt").
