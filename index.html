@@ -5382,14 +5382,33 @@ const gdCid=()=>localStorage.getItem('gd-cid')||'';
 const gdAuth=()=>{ try{ return JSON.parse(localStorage.getItem('gd-auth')||'null'); }catch(e){ return null; } };
 const odNorm=o=>{ const c=Object.assign({},o); delete c.savedAt; return JSON.stringify(c); };
 function odMime(u8){ if(u8[0]===0xFF&&u8[1]===0xD8) return 'image/jpeg'; if(u8[0]===0x89&&u8[1]===0x50) return 'image/png'; if(u8[0]===0x47&&u8[1]===0x49) return 'image/gif'; if(u8[0]===0x52&&u8[1]===0x49) return 'image/webp'; return 'application/octet-stream'; }
-function odMergeNotes(a,b,base){ // Notizen per ID vereinen; nur auf einer Seite vorhanden: behalten, wenn nach dem letzten Abgleich entstanden, sonst wurde sie dort gelöscht
+function noteHash(n){ return h53((n.html||'')+'|'+(n.text||'')); }
+function collectNoteHashes(d){ const m={}; for(const k of ['tasks','areas']) for(const e of (d[k]||[])) for(const n of (e.notes||[])) if(n&&n.id!=null) m[n.id]=noteHash(n); return m; }
+// Notizen per ID vereinen. Dreiwege-Abgleich gegen den Stand des letzten erfolgreichen Syncs (nb = {id:Hash}):
+// nur die Seite, die die Notiz seit dem verändert hat, setzt sich durch - unabhängig von Uhrzeiten. Haben beide
+// dieselbe Notiz verändert, gewinnt die zuletzt bearbeitete, die andere Fassung bleibt als "[Konflikt]"-Kopie erhalten.
+// Ohne Basis (erster Abgleich) gilt wie bisher: neuere Bearbeitung gewinnt; nur auf einer Seite vorhanden = behalten,
+// wenn nach dem letzten Abgleich entstanden.
+function odMergeNotes(a,b,base,nb){
   const am=new Map((a||[]).map(n=>[n.id,n])), bm=new Map((b||[]).map(n=>[n.id,n])), out=[];
-  for(const id of new Set([...am.keys(),...bm.keys()])){ const x=am.get(id), y=bm.get(id);
-    if(x&&y) out.push((y.editedAt||y.at||'')>(x.editedAt||x.at||'')?y:x);
-    else { const n=x||y; if(!(Date.parse(n.at)<=base)) out.push(n); } }
+  for(const id of new Set([...am.keys(),...bm.keys()])){ const x=am.get(id), y=bm.get(id), bh=nb?nb[id]:undefined;
+    if(x&&y){
+      const hx=noteHash(x), hy=noteHash(y);
+      if(hx===hy){ out.push((y.editedAt||'')>(x.editedAt||'')?y:x); continue; }
+      if(bh!==undefined && hx===bh){ out.push(y); continue; }
+      if(bh!==undefined && hy===bh){ out.push(x); continue; }
+      const win=(y.editedAt||y.at||'')>(x.editedAt||x.at||'')?y:x, lose=win===x?y:x;
+      out.push(win);
+      if(bh!==undefined) out.push(Object.assign({},lose,{id:lose.id+'~k'+noteHash(lose), text:'[Konflikt] '+(lose.text||''), html:'<p><i>Konfliktkopie - gleichzeitig auf einem anderen Gerät bearbeitet:</i></p>'+(lose.html||''), editedAt:null}));
+    } else {
+      const n=x||y;
+      if(bh!==undefined){ if(noteHash(n)!==bh) out.push(n); } // bekannt, fehlt auf der anderen Seite = dort gelöscht (außer hier seitdem geändert)
+      else if(nb || !(Date.parse(n.at)<=base)) out.push(n);
+    }
+  }
   return out;
 }
-function odMergeEntity(k,id,le,ce,lm,cm,base){
+function odMergeEntity(k,id,le,ce,lm,cm,base,nb){
   const lu=lm.upd[id]||0, cu=cm.upd[id]||0, lcu=(lm.cupd&&lm.cupd[id]!=null)?lm.cupd[id]:lu, ccu=(cm.cupd&&cm.cupd[id]!=null)?cm.cupd[id]:cu;
   const content=ccu>lcu?ce:le, timer=cu>lu?ce:le, r=Object.assign({},content);
   if(k==='tasks'){
@@ -5397,10 +5416,10 @@ function odMergeEntity(k,id,le,ce,lm,cm,base){
     const tm=new Map((timer.subtasks||[]).map(s=>[s.id,s]));
     if(Array.isArray(content.subtasks)) r.subtasks=content.subtasks.map(s=>{ const o=tm.get(s.id); if(!o) return s; const c=Object.assign({},s); SYNC_TK.forEach(f=>{ if(f in o) c[f]=o[f]; }); return c; });
   }
-  if(Array.isArray(le.notes)||Array.isArray(ce.notes)) r.notes=odMergeNotes(le.notes,ce.notes,base);
+  if(Array.isArray(le.notes)||Array.isArray(ce.notes)) r.notes=odMergeNotes(le.notes,ce.notes,base,nb);
   return {ent:r,upd:Math.max(lu,cu),cupd:Math.max(lcu,ccu)};
 }
-function odMerge(L,lm,C,cm,base){
+function odMerge(L,lm,C,cm,base,nb){
   base=base||0;
   const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={hv:2,upd:{},cupd:{},hash:{},chash:{},del:{}};
   for(const k of ['tasks','areas','recurring']){
@@ -5410,7 +5429,7 @@ function odMerge(L,lm,C,cm,base){
       if(le&&ce){
         let ent,upd,cupd;
         if(JSON.stringify(le)===JSON.stringify(ce)){ ent=le; upd=Math.max(lm.upd[id]||0,cm.upd[id]||0)||Date.now(); cupd=Math.max((lm.cupd||{})[id]||0,(cm.cupd||{})[id]||0)||upd; }
-        else { const m=odMergeEntity(k,id,le,ce,lm,cm,base); ent=m.ent; upd=m.upd||Date.now(); cupd=m.cupd||upd; }
+        else { const m=odMergeEntity(k,id,le,ce,lm,cm,base,nb); ent=m.ent; upd=m.upd||Date.now(); cupd=m.cupd||upd; }
         res.push(ent); meta.upd[id]=upd; meta.cupd[id]=cupd; meta.hash[id]=entHash(ent); meta.chash[id]=k==='tasks'?entHash(syncStripT(ent)):meta.hash[id];
         continue;
       }
@@ -5487,7 +5506,7 @@ async function gdSync(manual,retry){
     else if(!localStorage.getItem('gd-first')){
       if(!confirm('In Google Drive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den Google-Drive-Stand ersetzen?\n\nOK = Google Drive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
       await writeBackupSnapshot(JSON.stringify(state),true); merged=C; meta=cm;
-    } else ({merged,meta}=odMerge(L,lm,C,cm,Number(localStorage.getItem('gd-base')||0)));
+    } else { let nb=null; try{ const r=await idbGet(IDB_STATE_STORE,'notebase'); nb=r?JSON.parse(r):null; }catch(_){} ({merged,meta}=odMerge(L,lm,C,cm,Number(localStorage.getItem('gd-base')||0),nb)); }
     const ids=[...new Set([...JSON.stringify(merged).matchAll(TOK_RE)].map(m=>m[1]))];
     for(const id of ids){
       const loc=await idbGet(IDB_IMG_STORE,id), ex=files.get('img_'+id);
@@ -5505,6 +5524,7 @@ async function gdSync(manual,retry){
       if(cf){ const v=(await (await gdOk(await gdFetch(GD_API+'/'+cf.id+'?fields=version'))).json()).version; if(v!==cf.version){ const e=new Error('Konflikt'); e.code=412; throw e; } }
       await gdPut('daten.json',new Blob([JSON.stringify({v:1,b:gdBuild(),savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf);
     }
+    try{ await idbPut(IDB_STATE_STORE,JSON.stringify(collectNoteHashes(merged)),'notebase'); }catch(_){}
     localStorage.setItem('gd-first','1'); localStorage.setItem('gd-base',String(gdT0)); localStorage.setItem('gd-last',String(Date.now())); gdBusy=false; gdSet('');
   }catch(e){
     gdBusy=false;
@@ -5531,7 +5551,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=10, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=11, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
