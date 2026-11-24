@@ -3,10 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#1e3a5f">
-<link rel="icon" type="image/png" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
 <title>Aufgabenplaner</title>
 <script>try{ if(localStorage.getItem('aufgabenplaner-v2-theme')==='dark') document.documentElement.setAttribute('data-theme','dark'); }catch(e){}</script>
 <script>
@@ -162,15 +158,6 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 .gantt-row-label{cursor:default;}
 .gantt-deadline{--dl:var(--mid);position:absolute;top:0;bottom:0;right:-3px;width:6px;z-index:2;cursor:default;}
 .gantt-deadline.late{--dl:var(--high);}
-.gantt-deadline.sub{right:-1px;}
-.gantt-toggle{cursor:pointer;margin-right:4px;color:var(--ink-muted);user-select:none;}
-.gantt-sub-label{font-size:11px;font-weight:500;color:var(--ink-muted);padding-left:22px;min-height:24px;background-image:linear-gradient(90deg,rgba(120,150,110,.25) var(--prog,0%),transparent var(--prog,0%));}
-.gantt-sub-cell{min-height:24px;}
-.gantt-sub-cell .gantt-bar{top:5px;bottom:5px;opacity:.85;}
-.gantt-window{position:absolute;left:0;right:0;top:9px;bottom:9px;background:rgba(120,130,110,.16);border-radius:3px;}
-.gantt-window.late{background:rgba(200,70,60,.18);}
-.gantt-deadline.sub::after{width:2px;opacity:.85;}
-.gantt-deadline.sub::before{left:3px;border-top-width:4px;border-bottom-width:4px;border-left-width:6px;}
 .gantt-deadline::after{content:'';position:absolute;left:1px;width:3px;top:0;bottom:0;background:var(--dl);box-shadow:0 0 0 1px rgba(255,255,255,.7);}
 .gantt-deadline::before{content:'';position:absolute;left:4px;top:1px;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:9px solid var(--dl);z-index:1;}
 .gantt-bar.late{--late:#e11d0f;--sl:-2px 0 0 var(--late),inset 2px 0 0 #fff;--sr:2px 0 0 var(--late),inset -2px 0 0 #fff;box-shadow:0 -2px 0 var(--late),0 2px 0 var(--late),inset 0 2px 0 #fff,inset 0 -2px 0 #fff,var(--sl),var(--sr);}
@@ -258,11 +245,6 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 /* Detailfenster: Unteraufgaben als Tabelle mit gebuchter Zeit und Rest je Zeile */
 .tm.detail .sub-list{gap:0;margin-bottom:0;}
 .tm.detail .sub-item{display:grid;grid-template-columns:16px 18px minmax(0,1fr) 74px 58px 58px 24px 16px;gap:6px;background:none;border-radius:0;border-top:1px dashed var(--line);padding:5px 0;}
-.sub-item{flex-wrap:wrap;}
-.sub-dates{flex:0 0 100%;display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-muted);padding:0 0 0 38px;box-sizing:border-box;}
-.sub-dates input[type=date]{font-size:11.5px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink);font-family:inherit;}
-.sub-dates .sub-late{color:var(--high);font-weight:700;}
-.tm.detail .sub-dates{grid-column:1/-1;padding-left:34px;}
 .tm.detail .sub-item .num{text-align:right;font-family:var(--font-mono);font-size:12.5px;white-space:nowrap;}
 .tm.detail .sub-item .num.over{color:var(--high);font-weight:700;}
 .tm.detail .sub-item input.sub-hours{flex:1 1 auto;width:100%;min-width:0;text-align:right;}
@@ -362,6 +344,10 @@ body{margin:0;background:var(--bg);color:var(--ink);}
 .hist-day.today{border-color:var(--accent);}
 .hist-item{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px dashed var(--line);}
 .hist-item:first-child{border-top:none;}
+.hist-main{font-weight:700;}
+.hist-main .font-mono{color:var(--accent-ink);}
+.hist-sub{padding-left:22px;font-size:12.5px;color:var(--ink-soft,var(--ink));border-top:none;position:relative;}
+.hist-sub::before{content:'↳';position:absolute;left:8px;color:var(--ink-faint);}
 .hist-empty{color:var(--ink-faint);font-size:12.5px;font-style:italic;}
 /* Buchungen */
 .bk-group{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;box-shadow:var(--shadow);overflow:hidden;}
@@ -623,12 +609,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .nb-pal.menu{flex-direction:column;align-items:stretch}
 .nb-edwrap{flex:1;min-width:0;position:relative}
 .nb-edit{min-height:72px;background:var(--surface);border:1.5px solid var(--accent);border-radius:8px;padding:9px 12px;outline:none;font-size:14.5px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere}
-.nb-txt [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]),.nb-edit [style*="background-color"]:not([style*="transparent"]):not([style*="rgba(0, 0, 0, 0)"]){color:#1a1a1a !important}
-.prog-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:1px 9px}
-.prog-chip.unset{color:var(--ink-faint);border-style:dashed}
-.prog-chip .pb{width:48px;height:5px;border-radius:3px;background:var(--line);overflow:hidden}.prog-chip .pb i{display:block;height:100%;background:var(--accent)}
-.prog-mini{font-size:11.5px;color:var(--ink-muted);cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:0 7px;white-space:nowrap}.prog-mini.unset{color:var(--ink-faint);border-style:dashed}
-.sub-dates input.sub-prog{flex:0 0 90px;width:90px;accent-color:var(--accent)}
 .nb-edit:empty:before{content:attr(data-ph);color:var(--ink-faint)}
 .nb-edrow{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:12px;color:var(--ink-faint)}
 .nb-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:14px}
@@ -644,13 +624,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
 .nb-imgtb button{border:0;background:none;color:var(--ink);cursor:pointer;border-radius:6px;padding:4px 7px;font:inherit;font-size:12.5px}
 .nb-imgtb button:hover{background:var(--surface-2)}
 .nb-imgsel .grip{position:absolute;right:-7px;bottom:-7px;width:14px;height:14px;background:var(--accent);border:2px solid var(--surface);border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none}
-/* Mobil: Menüleiste unten immer vollständig erreichbar (sonst scrollbar), Platz für Android-Navigationsleiste */
-@media(max-width:760px){
-  .sidebar{overflow-x:auto;overflow-y:hidden;justify-content:flex-start;gap:0;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));scrollbar-width:none;}
-  .sidebar::-webkit-scrollbar{display:none;}
-  .nav-btn{flex:1 0 auto;min-width:44px;font-size:9.5px;padding:6px 5px;}
-  .main{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px));}
-}
 </style>
 </head>
 <body>
@@ -742,7 +715,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         <button class="btn small" id="btnGanttNext">→</button>
         <label class="check-inline"><input type="checkbox" id="chkPast"> Vergangenheit anzeigen</label>
         <label class="check-inline"><input type="checkbox" id="chkOnlyWorkdays"> Nur Arbeitstage anzeigen</label>
-        <label class="check-inline"><input type="checkbox" id="chkSubs"> Unteraufgaben anzeigen</label>
         <span id="ganttRangeLabel" class="view-sub" style="margin-left:6px;"></span>
         <button class="btn small" id="btnOpenCal" style="margin-left:auto;" title="Urlaub, Abwesenheiten und feste Termine eintragen">📅 Termine &amp; Urlaub</button>
       </div>
@@ -940,22 +912,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
         </div>
         <div id="legacyBody" class="storage-note"></div>
       </div>
-      <div class="settings-block" id="settingsVersion">
-        <h4>App-Version</h4>
-        <div class="storage-note" id="verInfo"></div>
-        <div class="export-row"><button class="btn" id="verReload">Neu laden (Zwischenspeicher leeren)</button></div>
-      </div>
-      <div class="settings-block" id="settingsDrive">
-        <h4>Google-Drive-Sync (PC ⇄ Handy)</h4>
-        <div class="hint">Gleicht Aufgaben, Notizen und Bilder über einen versteckten App-Ordner in deinem Google Drive ab (die App sieht keine anderen Dateien). Einmalig in der Google Cloud Console eine Client-ID erstellen und hier eintragen. Autorisierte JavaScript-Quelle: <b id="gdOrigin"></b></div>
-        <div class="export-row">
-          <input type="text" id="gdClientId" placeholder="Client-ID (…apps.googleusercontent.com)" style="min-width:290px;">
-          <button class="btn primary" id="gdLogin">Mit Google anmelden</button>
-          <button class="btn" id="gdSyncNow">Jetzt synchronisieren</button>
-          <button class="btn" id="gdLogout">Abmelden</button>
-        </div>
-        <div class="storage-note" id="gdStatus"></div>
-      </div>
       <div class="settings-block" id="settingsDataFile">
         <h4>Datendatei (JSON) – dauerhafte Speicherung</h4>
         <div class="hint">Zusätzlich zum Browser-Speicher kann jede Änderung automatisch in eine echte JSON-Datei auf deiner Festplatte geschrieben werden (nur Chrome/Edge). Beim nächsten Start wird sie automatisch wieder verbunden – ggf. mit einem Klick auf „Fortsetzen“.</div>
@@ -969,7 +925,7 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
           <button class="btn" id="btnExportPDF">⬇ Als PDF exportieren</button>
           <button class="btn" id="btnExportJSON">⬇ Sicherung exportieren (JSON)</button>
           <button class="btn" id="btnImportJSON">⬆ Sicherung importieren</button>
-          <input type="file" id="fileImport" style="display:none;">
+          <input type="file" id="fileImport" accept="application/json" style="display:none;">
         </div>
         <div class="storage-note" id="storageNote"></div>
       </div>
@@ -1104,7 +1060,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
               <label>Zieldatum</label>
               <input type="date" id="fDueDate">
             </div>
-
           </div>
           <div class="field-row d-only">
             <div class="field" style="flex:2;">
@@ -1136,11 +1091,6 @@ html[data-theme="dark"] #fProfileName{background:var(--bg) !important;color:var(
             </div>
             <div class="hint" id="fRecurHint" style="display:none;margin:-6px 0 14px;font-size:12px;color:var(--ink-muted);">Beim Erledigen dieser Aufgabe wird automatisch die nächste Instanz mit gleichem Titel/Bereich/Priorität/Unteraufgaben angelegt.</div>
           </div>
-        </div>
-        <div class="field d-only" id="fProgWrap">
-          <label>Fortschritt gesamt (Bauchgefühl, unabhängig von Stunden)</label>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="range" id="fProg" min="0" max="100" step="5" value="0" style="flex:1;min-width:140px"><input type="text" id="fProgNum" inputmode="numeric" style="width:54px;text-align:right"> %<button type="button" class="btn small ghost" id="fProgSug">Automatisch aus Unteraufgaben</button></div>
-          <div class="hint" id="fProgHint"></div>
         </div>
         <div class="tm-sec">
           <h4 class="d-only">Unteraufgaben &amp; Zeiten <span class="sum" id="tmSubSum"></span></h4>
@@ -1306,8 +1256,7 @@ const FILTER_STATUS_LABELS = Object.assign({erledigt:'Erledigt', abgebrochen:'Ab
 const FILTER_STATUS_ACTIVE_DEFAULT = ['nicht_begonnen','in_bearbeitung','inaktiv','wartet_auf_info'];
 
 let state = { tasks: [], areas: [], settings: null, recurring: [] };
-let ganttRange = 'week', ganttAnchor = new Date(), showPast = false, showOnlyWorkdays = true, showSubs = false;
-const ganttOpen = new Set(); // einzeln aufgeklappte Aufgaben
+let ganttRange = 'week', ganttAnchor = new Date(), showPast = false, showOnlyWorkdays = true;
 let historyRange = 'week', historyAnchor = new Date();
 let editingTaskId = null, editSubtasks = [], openPaletteFor = null;
 let openStatusPickerFor = null, openPriorityPickerFor = null;
@@ -1342,8 +1291,8 @@ function defaultSettings(){
 }
 // --- IndexedDB: primärer Speicher, localStorage dient als Fallback/Sicherheitsnetz ---
 // Version 2: zusätzlicher Store "handles" für den gemerkten Sicherungsordner (File System Access API).
-const IDB_NAME = 'aufgabenplaner-v2-db', IDB_VERSION = 3;
-const IDB_IMG_STORE = 'images', IDB_STATE_STORE = 'state', IDB_BACKUP_STORE = 'backups', IDB_HANDLE_STORE = 'handles';
+const IDB_NAME = 'aufgabenplaner-v2-db', IDB_VERSION = 2;
+const IDB_STATE_STORE = 'state', IDB_BACKUP_STORE = 'backups', IDB_HANDLE_STORE = 'handles';
 const BACKUP_MIN_INTERVAL_MS = 60*60*1000; // max. 1 automatischer Snapshot pro Stunde
 const BACKUP_MAX_COUNT = 30;
 const LAST_BACKUP_KEY = 'aufgabenplaner-v2-last-backup-at';
@@ -1359,7 +1308,6 @@ function openIDB(){
         const db = req.result;
         if(!db.objectStoreNames.contains(IDB_STATE_STORE)) db.createObjectStore(IDB_STATE_STORE);
         if(!db.objectStoreNames.contains(IDB_BACKUP_STORE)) db.createObjectStore(IDB_BACKUP_STORE, {keyPath:'ts'});
-        if(!db.objectStoreNames.contains(IDB_IMG_STORE)) db.createObjectStore(IDB_IMG_STORE);
         if(!db.objectStoreNames.contains(IDB_HANDLE_STORE)) db.createObjectStore(IDB_HANDLE_STORE);
       };
       // Ist noch ein Tab mit einer älteren Version offen, wartet das Upgrade, bis er geschlossen ist.
@@ -1420,77 +1368,28 @@ async function writeBackupSnapshot(json, force){
   if(!force && now-lastBackupAt < BACKUP_MIN_INTERVAL_MS) return;
   lastBackupAt = now;
   try{ localStorage.setItem(LAST_BACKUP_KEY, String(now)); }catch(e){}
-  await idbPut(IDB_BACKUP_STORE, {ts:now, data:await externalizeJson(json)});
+  await idbPut(IDB_BACKUP_STORE, {ts:now, data:json});
   const all = await idbGetAll(IDB_BACKUP_STORE);
   if(all.length > BACKUP_MAX_COUNT){
     all.sort((a,b)=>a.ts-b.ts);
     for(const b of all.slice(0, all.length-BACKUP_MAX_COUNT)) await idbDelete(IDB_BACKUP_STORE, b.ts);
   }
 }
-// --- Bilder auslagern (Base64 im Notiztext -> eigener Eintrag "aimg:<hash>") + Änderungsverfolgung für den Cloud-Abgleich ---
-const IMG_RE=/data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+/g, TOK_RE=/aimg:([0-9a-f]{32})/g;
-const knownImgs=new Set(); let lastSlim=null, syncMeta=null;
-async function sha32(s){ const b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].slice(0,16).map(x=>x.toString(16).padStart(2,'0')).join(''); }
-function blobToUrl(b){ return new Promise(r=>{ const f=new FileReader(); f.onload=()=>r(f.result); f.onerror=()=>r(null); f.readAsDataURL(b); }); }
-async function externalizeJson(json){
-  const urls=[...new Set(json.match(IMG_RE)||[])]; if(!urls.length) return json;
-  const map=new Map();
-  try{
-    for(const u of urls){ const id=await sha32(u); map.set(u,id);
-      if(knownImgs.has(id)) continue;
-      if(!(await idbGet(IDB_IMG_STORE,id))){ const blob=await (await fetch(u)).blob(); if(!(await idbPut(IDB_IMG_STORE,blob,id))) return json; }
-      knownImgs.add(id); }
-  }catch(e){ console.warn('Bilder auslagern fehlgeschlagen', e); return json; } // im Zweifel Bilder im Text lassen
-  return json.replace(IMG_RE,u=>'aimg:'+map.get(u));
-}
-async function inflateJson(json){
-  const ids=[...new Set([...json.matchAll(TOK_RE)].map(m=>m[1]))]; if(!ids.length) return json;
-  const map=new Map();
-  for(const id of ids){ const b=await idbGet(IDB_IMG_STORE,id); const u=b?await blobToUrl(b):null; if(u){ map.set(id,u); knownImgs.add(id); } }
-  return json.replace(TOK_RE,(m,id)=>map.get(id)||m);
-}
-function h53(str){ let h1=0xdeadbeef,h2=0x41c6ce57; for(let i=0;i<str.length;i++){ const c=str.charCodeAt(i); h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
-  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909); h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
-  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36); }
-function syncNorm(v){
-  if(Array.isArray(v)) return v.map(x=> (x&&typeof x==='object') ? (syncNorm(x)||{}) : x);
-  if(v&&typeof v==='object'){ const o={}; for(const k of Object.keys(v).sort()){ const x=syncNorm(v[k]); if(x!==undefined && !(Array.isArray(x)&&!x.length)) o[k]=x; } return Object.keys(o).length?o:undefined; }
-  return (v===null||v===undefined||v===false||v===''||v===0) ? undefined : v;
-}
-function entHash(e){ return h53(JSON.stringify(syncNorm(e)||{})); }
-const SYNC_TK=['timerRunning','timerLastTick','timeSpentSec','timeLog','timeEvents','lastActivityAt'];
-function syncStripT(e){ const c=Object.assign({},e); SYNC_TK.forEach(k=>delete c[k]); if(Array.isArray(c.subtasks)) c.subtasks=c.subtasks.map(syncStripT); return c; }
-async function trackChanges(slim){ // merkt sich je Aufgabe/Bereich/Wiederkehrend: letzte Änderung (upd), letzte INHALTS-Änderung ohne Timerfelder (cupd) und Löschung (del)
-  try{
-    if(!syncMeta){ const r=await idbGet(IDB_STATE_STORE,'syncmeta'); syncMeta=r?JSON.parse(r):{upd:{},hash:{},del:{}}; }
-    syncMeta.cupd=syncMeta.cupd||{}; syncMeta.chash=syncMeta.chash||{};
-    const d=JSON.parse(slim), now=Date.now(), seen=new Set(), rebase=syncMeta.hv!==2; let chg=false;
-    for(const k of ['tasks','areas','recurring']) for(const e of (d[k]||[])){ if(!e||e.id==null) continue;
-      const id=k+':'+e.id, h=entHash(e), c=k==='tasks'?entHash(syncStripT(e)):h; seen.add(id);
-      if(rebase && syncMeta.hash[id]!==undefined){ if(syncMeta.hash[id]!==h||syncMeta.chash[id]!==c){ syncMeta.hash[id]=h; syncMeta.chash[id]=c; chg=true; } continue; } // einmalige Umstellung des Hash-Verfahrens: keine Zeitstempel verändern
-      if(syncMeta.hash[id]!==h){ syncMeta.hash[id]=h; syncMeta.upd[id]=now; delete syncMeta.del[id]; if(syncMeta.chash[id]!==c){ syncMeta.cupd[id]=now; syncMeta.chash[id]=c; } chg=true; }
-      else if(syncMeta.chash[id]===undefined){ syncMeta.chash[id]=c; chg=true; } }
-    for(const id of Object.keys(syncMeta.hash)) if(!seen.has(id)){ delete syncMeta.hash[id]; delete syncMeta.upd[id]; delete syncMeta.cupd[id]; delete syncMeta.chash[id]; syncMeta.del[id]=now; chg=true; }
-    if(rebase){ syncMeta.hv=2; chg=true; }
-    if(chg) await idbPut(IDB_STATE_STORE,JSON.stringify(syncMeta),'syncmeta');
-  }catch(e){ console.warn('trackChanges',e); }
-}
 const store = {
   async get(){
     const idbJson = await idbGet(IDB_STATE_STORE, 'current');
-    if(idbJson){ try{ return JSON.parse(await inflateJson(idbJson)); }catch(e){} }
-    try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(await inflateJson(raw)) : null; }catch(e){ return null; }
+    if(idbJson){ try{ return JSON.parse(idbJson); }catch(e){} }
+    try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
   },
   async set(data){
     data.savedAt = Date.now();
-    const json = await externalizeJson(JSON.stringify(data)); lastSlim = json;
+    const json = JSON.stringify(data);
     try{ localStorage.setItem(STORE_KEY, json); }catch(e){ console.error('localStorage speichern fehlgeschlagen', e); }
-    await idbPut(IDB_STATE_STORE, json, 'current'); await trackChanges(json);
+    await idbPut(IDB_STATE_STORE, json, 'current');
     await writeBackupSnapshot(json, false);
     // Zusätzlich (höchstens stündlich) als Datei in den gewählten Sicherungsordner.
     writeFolderBackup(false).catch(()=>{});
   try{ scheduleDataFileWrite(); }catch(e){}
-  try{ gdScheduleSync(); }catch(e){}
   }
 };
 
@@ -1549,7 +1448,6 @@ function migrateState(){
     t.estHours = parseHours(t.estHours);
     t.priority = ['high','mid','low'].includes(t.priority) ? t.priority : 'mid';
     t.manualStatus = t.manualStatus || null;
-    t.progress = (t.progress!=null && Number.isFinite(Number(t.progress))) ? Math.max(0,Math.min(100,Math.round(Number(t.progress)))) : null; t.progressAt = t.progressAt || null;
     t.remindedAt = Number(t.remindedAt)||0;
     t.client = typeof t.client === 'string' ? t.client : '';
     t.startDate = /^\d{4}-\d{2}-\d{2}$/.test(t.startDate||'') ? t.startDate : null;
@@ -1598,10 +1496,8 @@ function migrateState(){
     t.subtasks.forEach(s=>{
       if(s.estMinutes!=null && s.estHours==null){ s.estHours = Math.round((s.estMinutes/60)*100)/100; delete s.estMinutes; }
       s.estHours = parseHours(s.estHours);
-      s.progress = (s.progress!=null && Number.isFinite(Number(s.progress))) ? Math.max(0,Math.min(100,Math.round(Number(s.progress)))) : null;
       s.done = !!s.done;
       s.doneAt = s.doneAt || null;
-      s.startDate = s.startDate || null; s.dueDate = s.dueDate || null;
       s.timeSpentSec = Math.max(0, Number(s.timeSpentSec)||0);
       s.timeLog = s.timeLog || {};
       s.timeEvents = Array.isArray(s.timeEvents) ? s.timeEvents : [];
@@ -1632,7 +1528,7 @@ async function saveAreas(){ await saveAll(); }
 async function saveSettings(){ await saveAll(); }
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ saveAll(); } });
 window.addEventListener('beforeunload', ()=>{
-  try{ if(lastSlim) localStorage.setItem(STORE_KEY, lastSlim); }catch(e){}
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
   try{
     const running = findRunningEntity();
     if(running) localStorage.setItem(TIMER_CLOSE_MARKER_KEY, JSON.stringify({taskId:running.task.id, subId:running.sub?running.sub.id:null, closedAt:Date.now()}));
@@ -1748,25 +1644,6 @@ function insertByPriorityClass(task){
   open.forEach((t,i)=> t.priorityOrder = i);
 }
 function fmtDateTimeShort(iso){ const d=new Date(iso); return `${pad(d.getDate())}.${pad(d.getMonth()+1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
-// Vorschlag fuer den Gesamtfortschritt aus den Unteraufgaben: erledigte Unteraufgaben, gewichtet nach geplanter Dauer
-// (ohne Schaetzung: Durchschnitt der geschaetzten, sonst gleiches Gewicht). Gebuchte Stunden fliessen bewusst nicht ein.
-function progressSuggestion(subs){
-  subs=(subs||[]).filter(x=>x&&String(x.title||'').trim()); if(!subs.length) return null;
-  const est=subs.map(x=>parseHours(x.estHours)).filter(h=>h>0), avg=est.length?est.reduce((a,b)=>a+b,0)/est.length:1;
-  let tot=0, got=0, nDone=0; subs.forEach(x=>{ const w=parseHours(x.estHours)>0?parseHours(x.estHours):avg; tot+=w; got+=w*(x.done?100:(x.progress||0))/100; if(x.done) nDone++; });
-  return {pct:Math.round(got/tot*100), done:nDone, total:subs.length};
-}
-// Wirksamer Gesamtfortschritt: manuelle Schaetzung, sonst automatisch aus den Unteraufgaben.
-function taskProgress(t){
-  if(t.progress!=null) return {pct:t.progress, auto:false};
-  const sg=progressSuggestion(t.subtasks); return sg?{pct:sg.pct, auto:true}:null;
-}
-function progressChipHtml(t){
-  if(t.done) return '';
-  const tp=taskProgress(t), at=t.progressAt?fmtDate(String(t.progressAt).slice(0,10)):'';
-  if(!tp) return `<span class="prog-chip unset" data-set-progress="${t.id}" title="Fortschritt schätzen">Fortschritt schätzen</span>`;
-  return `<span class="prog-chip" data-set-progress="${t.id}" title="${tp.auto?'Aus den Unteraufgaben berechnet':'Geschätzter Fortschritt'+(at?' (Stand '+at+')':'')} - klicken zum Ändern"><span class="pb"><i style="width:${tp.pct}%"></i></span>${tp.auto?'≈ ':''}${tp.pct} %</span>`;
-}
 function logChange(t, field, fromLabel, toLabel){
   if(fromLabel === toLabel) return;
   t.changeLog = t.changeLog || [];
@@ -2177,50 +2054,7 @@ function capacityFromNowUntil(untilDate){
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) total += plannedCapacity(d);
   return total;
 }
-// Arbeitseinheiten einer Aufgabe (Allgemeinzeit + offene Unteraufgaben) in Planungsreihenfolge:
-// Einheiten mit Zieltermin zuerst (früheste Frist zuerst), danach die ohne Termin in Listenreihenfolge.
-function taskUnits(t){
-  const u=[], own=Math.max(0, parseHours(t.estHours)-entitySpentHours(t))*60;
-  if(own>0) u.push({key:'own', title:'Allgemein', rem:own, startDate:null, dueDate:null, idx:-1});
-  (t.subtasks||[]).forEach((s,i)=>{ if(s.done) return; const rem=Math.max(0, parseHours(s.estHours)-entitySpentHours(s))*60;
-    if(rem>0) u.push({key:s.id, title:s.title, rem, startDate:s.startDate||null, dueDate:s.dueDate||null, idx:i}); });
-  return u.sort((a,b)=> (a.dueDate?0:1)-(b.dueDate?0:1) || ((a.dueDate&&b.dueDate&&a.dueDate!==b.dueDate)?(a.dueDate<b.dueDate?-1:1):0) || a.idx-b.idx);
-}
-// Verteilt die an einem Tag eingeplanten Minuten auf die startbereiten Einheiten (Startdatum der Unteraufgabe).
-function consumeUnits(units, ymd, minutes){
-  let used=0;
-  for(const u of units){ if(minutes-used<=0) break; if(u.rem<=0 || (u.startDate && ymd<u.startDate)) continue; const x=Math.min(u.rem, minutes-used); u.rem-=x; used+=x; u.last=ymd; }
-  return used;
-}
-function eligibleMinutes(units, ymd){ return units.reduce((s,u)=> s + ((u.rem>0 && !(u.startDate && ymd<u.startDate)) ? u.rem : 0), 0); }
-// Planstand je Einheit aus den eingeplanten Tagen einer Aufgabe (gleiche Verteilung wie in buildSchedule).
-function taskUnitFinish(t, seg){
-  const units=taskUnits(t); Object.keys(seg||{}).sort().forEach(d=>consumeUnits(units, d, seg[d].minutes));
-  return units.map(u=>({key:u.key, title:u.title, startDate:u.startDate, dueDate:u.dueDate, last:u.last||null, complete:u.rem<=0.5}));
-}
-// Risiko aus den Zielterminen der Unteraufgaben (unabhängig vom Ziel der Gesamtaufgabe).
-function subRiskInfo(t){
-  const todayYmd=toISODate(new Date()), dated=taskUnits(t).filter(u=>u.dueDate);
-  if(!dated.length) return null;
-  const pf = t.isQuickLog ? null : plannedFinish(t);
-  let warn=null;
-  for(const u of dated){
-    if(u.dueDate<todayYmd) return {level:'blocked', label:'Teilziel überfällig', title:`„${u.title}“ war bis ${fmtDate(u.dueDate)} geplant und ist noch offen.`};
-    const needH=dated.filter(x=>x.dueDate<=u.dueDate).reduce((s,x)=>s+x.rem,0)/60;
-    const availH=capacityFromNowUntil(new Date(u.dueDate+'T23:59:59'))/60;
-    if(availH<needH) return {level:'blocked', label:'Teilziel kaum erreichbar', title:`„${u.title}“: bis ${fmtDate(u.dueDate)} sind ${fmtHours(needH)} nötig (inkl. früher fälliger Teile), aber nur ${fmtHours(availH)} Arbeitszeit verfügbar.`};
-    if(!warn && availH<needH*2) warn={level:'warn', label:'Teilziel knapp', title:`„${u.title}“: bis ${fmtDate(u.dueDate)} ${fmtHours(needH)} nötig, ${fmtHours(availH)} verfügbar - wenig Puffer.`};
-  }
-  const sl = pf && pf.subLate;
-  if(sl) return {level:'blocked', label:'Teilziel kaum erreichbar', title: sl.last && sl.complete ? `Laut Planung wird „${sl.title}“ erst am ${fmtDate(sl.last)} fertig, Teilziel ${fmtDate(sl.dueDate)}.` : `Laut Planung wird „${sl.title}“ nicht bis ${fmtDate(sl.dueDate)} fertig.`};
-  return warn;
-}
 function riskInfo(t){
-  if(t.done) return null;
-  const rank={blocked:2, warn:1}, a=taskRiskInfo(t), b=subRiskInfo(t);
-  return (a && b) ? (rank[b.level]>rank[a.level] ? b : a) : (a||b||null);
-}
-function taskRiskInfo(t){
   if(t.done || !t.dueDate) return null;
   const remH = taskRemainingHours(t);
   if(remH<=0) return null;
@@ -2254,8 +2088,7 @@ function plannedFinish(t, sched){
   // Reicht der Planungshorizont nicht, zählt das nur als "zu spät", wenn der Termin innerhalb liegt.
   const horizonEnd = Object.keys(s.dayCaps||{}).sort().pop() || '';
   const late = !t.done && !!t.dueDate && taskRemainingHours(t)>0 && ((!complete && t.dueDate <= horizonEnd) || (!!last && last > t.dueDate));
-  const subs = t.done ? [] : (s.unitInfo&&s.unitInfo[t.id] ? s.unitInfo[t.id].map(u=>Object.assign({},u)) : taskUnitFinish(t, seg)).filter(u=>u.dueDate).map(u=>Object.assign(u,{late: (!u.complete && u.dueDate<=horizonEnd) || (!!u.last && u.last>u.dueDate)}));
-  return {last, complete, late, subs, subLate: subs.find(u=>u.late)||null};
+  return {last, complete, late};
 }
 
 function renderAll(){
@@ -2429,7 +2262,6 @@ function subtaskRowsHtml(t){
     <div class="subtask-row">
       <input type="checkbox" data-sub="${s.id}" data-task="${t.id}" ${s.done?'checked':''} ${t.done?'disabled':''}>
       <span class="${s.done?'done':''}">${escapeHtml(s.title)}</span>
-      ${(!t.done&&!s.done)?`<span class="prog-mini ${s.progress==null?'unset':''}" data-set-sub-progress="${s.id}" data-task="${t.id}" title="Fortschritt dieser Unteraufgabe schätzen">${s.progress==null?'% ?':s.progress+' %'}</span>`:''}
       <span class="subtask-time ${sOver?'over':''}" ${sOver?`title="${escapeAttr(`${fmtHours(sSpent)} erfasst, ${fmtHours(sEst)} geschätzt`)}"`:''}>${fmtHours(sSpent)} / ${fmtHours(sEst)}</span>
       ${s.timerRunning?`<span class="timer-chip running" data-sub-timer="${s.id}"><span class="dot"></span><span class="tval" data-sub-timer-val="${s.id}">${fmtHMS(s.timeSpentSec||0)}</span></span>`:''}
       ${canTime?`<span class="miniBtn" data-toggle-sub-timer="${s.id}" title="${s.timerRunning?'Pausieren':'Starten'}">${s.timerRunning?'⏸':'▶'}</span>`:''}
@@ -2463,7 +2295,7 @@ function taskCardHtml(t, opts){
         ${t.done?'':`<span class="badge clickable ${prioClass(t.priority)}" title="Priorität ändern" data-open-priority="${t.id}">${prioLabel(t.priority)}</span>`}
         ${status?`<span class="badge clickable status-${status}" title="Status ändern" data-open-status="${t.id}">${STATUS_META[status].label}</span>`:''}
         ${t.cancelled?`<span class="badge status-abgebrochen">Abgebrochen</span>`:''}
-        ${t.dueDate?`<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>`:''}${subDueBadge(t)}
+        ${t.dueDate?`<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>`:''}
         ${risk?`<span class="badge risk-${risk.level}" title="${escapeAttr(risk.title)}">! ${risk.label}</span>`:''}
         ${over?`<span class="badge time-over" title="${escapeAttr(`${fmtHours(spent)} erfasst, ${fmtHours(est)} geschätzt (+${fmtHours(spent-est)})`)}">⏱ Zeit überschritten</span>`:''}
         ${status==='wartet_auf_info'?(()=>{ const wd=waitDueDate(t), due=wd<=toISODate(new Date()); return `<span class="badge ${due?'risk-blocked':'due'}" title="Nachhak-Frist - ab dann erinnert die App ans Nachhaken">${waitBadgeText(wd)}</span>`; })():''}
@@ -2477,7 +2309,6 @@ function taskCardHtml(t, opts){
       ${openStatusPickerFor===t.id?`<div class="quick-picker">${MANUAL_STATUS_OPTIONS.map(s=>`<span class="quick-picker-opt status-${s} ${s===status?'current':''}" data-pick-status="${s}">${STATUS_META[s].label}</span>`).join('')}</div>`:''}
       <div class="task-meta">
         ${est>0?`<span class="${over?'over':''}">${fmtHours(spent)} / ${fmtHours(est)}</span><div class="progress-bar"><div style="width:${pct}%"></div></div>`:'<span>Keine Zeitschätzung</span>'}
-        ${progressChipHtml(t)}
         ${!t.done && !t.subtasks.length?`<span class="timer-chip ${t.timerRunning?'running':''}" data-timer="${t.id}"><span class="dot"></span><span class="tval">${fmtHMS(t.timeSpentSec||0)}</span></span>`:''}
       </div>
       ${subtasksBlockHtml(t, !!opts.compact)}
@@ -2536,17 +2367,6 @@ document.getElementById('statusChips').addEventListener('click', e=>{
   if(statusFilterKeys.has(k)) statusFilterKeys.delete(k); else statusFilterKeys.add(k);
   renderList();
 });
-function progHintRefresh(){
-  const h=document.getElementById('fProgHint'); if(!h) return; const sl=document.getElementById('fProg'), num=document.getElementById('fProgNum'), sug=progressSuggestion(editSubtasks), t=editingTaskId?state.tasks.find(x=>x.id===editingTaskId):null;
-  const manual=!!(sl.dataset.touched||(sl.dataset.had&&!sl.dataset.auto));
-  if(!manual && sug){ sl.value=sug.pct; num.value=sug.pct; }
-  const at=(t&&t.progressAt&&manual)?' · zuletzt geschätzt am '+fmtDate(String(t.progressAt).slice(0,10)):'';
-  h.textContent=(sug?(manual?'Manuell geschätzt. ':'Automatisch aus den Unteraufgaben. ')+'Berechnet: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt, Teilfortschritte nach geplanter Dauer gewichtet)':(manual||sl.dataset.had?'':'Noch nicht geschätzt. ')+'Keine Unteraufgaben – reine Schätzung.')+at;
-}
-document.getElementById('fProg').addEventListener('input',e=>{ e.target.dataset.touched='1'; e.target.dataset.auto=''; document.getElementById('fProgNum').value=e.target.value; progHintRefresh(); });
-document.getElementById('fProgNum').addEventListener('input',e=>{ const v=Math.max(0,Math.min(100,parseInt(String(e.target.value).replace(/[^\d]/g,''),10)||0)); const sl=document.getElementById('fProg'); sl.value=v; sl.dataset.touched='1'; sl.dataset.auto=''; });
-document.getElementById('fProgSug').addEventListener('click',()=>{ if(!progressSuggestion(editSubtasks)) return; const sl=document.getElementById('fProg'); sl.dataset.touched=''; sl.dataset.auto='1'; progHintRefresh(); });
-document.getElementById('taskModalBg').addEventListener('click',()=>setTimeout(progHintRefresh,0));
 async function handleTaskCardClick(e){
   const del=e.target.closest('[data-del]'), edit=e.target.closest('[data-edit]'), done=e.target.closest('[data-toggle-done]'), timer=e.target.closest('[data-toggle-timer]'), addTime=e.target.closest('[data-add-time]');
   const subTimer=e.target.closest('[data-toggle-sub-timer]'), addSubTime=e.target.closest('[data-add-sub-time]');
@@ -2560,24 +2380,6 @@ async function handleTaskCardClick(e){
     // Klick auf ein Tag-Etikett: Aufgabenliste nach diesem Tag filtern.
     document.querySelector('.nav-btn[data-view="list"]').click();
     renderFilters(); document.getElementById('filterTag').value = tagBadge.dataset.filterTag; renderList(); return;
-  }
-  const setSubProg = e.target.closest('[data-set-sub-progress]');
-  if(setSubProg){
-    const t=state.tasks.find(x=>x.id===setSubProg.dataset.task), sb=t&&t.subtasks.find(x=>x.id===setSubProg.dataset.setSubProgress); if(!sb) return;
-    const txt=prompt('Wie viel von „'+sb.title+'“ ist erledigt? (0–100 %)', sb.progress!=null?sb.progress:''); if(txt===null) return;
-    let nv=null; if(String(txt).trim()!==''){ const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return; nv=Math.max(0,Math.min(100,v)); }
-    logChange(t,'Fortschritt Unteraufgabe „'+sb.title+'“',sb.progress!=null?sb.progress+' %':'–',nv!=null?nv+' %':'–'); sb.progress=nv; await saveTasks(); renderAll(); return;
-  }
-  const setProg = e.target.closest('[data-set-progress]');
-  if(setProg){
-    const t=state.tasks.find(x=>x.id===setProg.dataset.setProgress); if(!t) return;
-    const sug=progressSuggestion(t.subtasks);
-    const txt=prompt('Wie viel von „'+t.title+'“ ist erledigt? (0–100 %)'+(sug?'\nAus Unteraufgaben berechnet: '+sug.pct+' % ('+sug.done+' von '+sug.total+' erledigt). Feld leeren = automatisch.':''), t.progress!=null?t.progress:(sug?sug.pct:''));
-    if(txt===null) return;
-    if(String(txt).trim()===''){ if(sug){ logChange(t,'Fortschritt (Schätzung)',t.progress!=null?t.progress+' %':'automatisch','automatisch'); t.progress=null; t.progressAt=null; await saveTasks(); renderAll(); } return; }
-    const v=parseInt(String(txt).replace(/[^\d]/g,''),10); if(!Number.isFinite(v)) return;
-    const nv=Math.max(0,Math.min(100,v)); logChange(t,'Fortschritt (Schätzung)',t.progress!=null?t.progress+' %':'–',nv+' %');
-    t.progress=nv; t.progressAt=new Date().toISOString(); await saveTasks(); renderAll(); return;
   }
   if(subsToggle){ subsToggle.closest('[data-id]')?.classList.toggle('subs-expanded'); return; }
   if(ownTimer){ toggleTimer(ownTimer.dataset.toggleOwnTimer, null); return; }
@@ -2639,7 +2441,6 @@ function openTaskModal(id){
   document.getElementById('fPriority').value = t ? t.priority : 'mid';
   document.getElementById('fEstHours').value = t && t.estHours ? String(t.estHours).replace('.',',') : '';
   document.getElementById('fStatus').value = t ? (t.manualStatus || '') : '';
-  { const pr=t&&t.progress!=null?t.progress:0, sl=document.getElementById('fProg'); sl.value=pr; sl.dataset.touched=''; sl.dataset.auto=''; sl.dataset.had=(t&&t.progress!=null)?'1':''; document.getElementById('fProgNum').value=pr; progHintRefresh(); }
   document.getElementById('fWaitInputs').innerHTML = waitDeadlineInputsHtml(t && t.manualStatus==='wartet_auf_info' ? waitDueDate(t) : defaultWaitUntil());
   updateWaitUI();
   editTags = t ? (t.tags||[]).slice() : [];
@@ -2735,7 +2536,7 @@ function renderTaskModalHead(){
     area ? `<span class="badge area" style="background:${area.color}22;color:${area.color}">${escapeHtml(area.name)}</span>` : '',
     `<span class="badge ${prioClass(t.priority)}">${prioLabel(t.priority)}</span>`,
     status ? `<span class="badge status-${status}">${STATUS_META[status].label}</span>` : (t.cancelled ? '<span class="badge status-abgebrochen">Abgebrochen</span>' : '<span class="badge status-erledigt">Erledigt</span>'),
-    t.dueDate ? `<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>` : '', subDueBadge(t),
+    t.dueDate ? `<span class="badge due">Ziel: ${fmtDate(t.dueDate)}</span>` : '',
     risk ? `<span class="badge risk-${risk.level}" title="${escapeAttr(risk.title)}">! ${risk.label}</span>` : '',
     over ? '<span class="badge time-over">⏱ Zeit überschritten</span>' : '',
     status==='wartet_auf_info' ? `<span class="badge due">${waitBadgeText(waitDueDate(t))}</span>` : '',
@@ -2908,9 +2709,6 @@ function toggleEstVisibility(){
   document.getElementById('fEstQuickWrap').style.display = editSubtasks.length ? 'none' : '';
   renderMoreHint(); refreshTaskModalLive();
 }
-// Nächster offener Zieltermin einer Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)
-function nextSubDue(t){ let best=null; for(const s of (t.subtasks||[])) if(!s.done && s.dueDate && (!best || s.dueDate<best.dueDate)) best=s; return best; }
-function subDueBadge(t){ const b=nextSubDue(t); if(!b) return ''; const late=b.dueDate<toISODate(new Date()); return `<span class="badge due" title="${escapeAttr('Unteraufgabe: '+b.title)}"${late?' style="color:var(--high);font-weight:700;"':''}>Teilziel: ${fmtDate(b.dueDate)}</span>`; }
 function renderSubList(){
   document.getElementById('subList').innerHTML = editSubtasks.map((s,i)=>`
     <div class="sub-item ${s.done?'done':''}" data-idx="${i}">
@@ -2920,7 +2718,6 @@ function renderSubList(){
       <span class="est-cell"><input type="text" class="sub-hours" inputmode="decimal" data-hours="${i}" value="${String(s.estHours||0).replace('.',',')}"><span style="color:var(--ink-faint);font-size:11px;">h</span></span>
       <span class="num d-only" data-live-spent="${s.id}"></span><span class="num d-only" data-live-rest="${s.id}"></span><span class="d-only" data-live-timer="${s.id}"></span>
       <span class="miniBtn" data-rm="${i}" title="Entfernen">✕</span>
-      <div class="sub-dates"><span>Geplant:</span><input type="date" data-sdate="start" data-i="${i}" value="${s.startDate||''}" title="Geplanter Start der Unteraufgabe"><span>bis</span><input type="date" data-sdate="due" data-i="${i}" value="${s.dueDate||''}" title="Zieltermin der Unteraufgabe (unabhängig vom Ziel der Gesamtaufgabe)">${(!s.done&&s.dueDate&&s.dueDate<toISODate(new Date()))?'<span class="sub-late">überfällig</span>':''}<span>Fortschritt:</span><input type="range" class="sub-prog" min="0" max="100" step="5" data-sprog="${i}" value="${s.done?100:(s.progress||0)}" ${s.done?'disabled':''} title="Geschätzter Fortschritt der Unteraufgabe"><span data-sprog-val="${i}">${s.done?'100 %':(s.progress!=null?s.progress+' %':'–')}</span></div>
     </div>`).join('');
   fitSubTitles();
   toggleEstVisibility();
@@ -2936,11 +2733,6 @@ document.getElementById('subList').addEventListener('click', e=>{
   if(rm){ editSubtasks.splice(Number(rm.dataset.rm),1); renderSubList(); }
 });
 document.getElementById('subList').addEventListener('change', e=>{
-  const dt = e.target.closest('[data-sdate]');
-  if(dt){ const sub = editSubtasks[Number(dt.dataset.i)]; if(!sub) return;
-    sub[dt.dataset.sdate==='start'?'startDate':'dueDate'] = dt.value || null;
-    if(sub.startDate && sub.dueDate && sub.dueDate<sub.startDate){ if(dt.dataset.sdate==='start') sub.dueDate = sub.startDate; else sub.startDate = sub.dueDate; }
-    renderSubList(); return; }
   const cb = e.target.closest('[data-sub-done]'); if(!cb) return;
   const sub = editSubtasks[Number(cb.dataset.subDone)]; if(!sub) return;
   sub.done = cb.checked; sub.doneAt = sub.done ? (sub.doneAt || Date.now()) : null;
@@ -2951,14 +2743,12 @@ document.getElementById('subList').addEventListener('input', e=>{
   const t=e.target.closest('[data-title]'), h=e.target.closest('[data-hours]');
   if(t){ editSubtasks[Number(t.dataset.title)].title = t.value.replace(/\s*\n\s*/g,' '); autoResize(t); }
   if(h) editSubtasks[Number(h.dataset.hours)].estHours = parseHours(h.value);
-  const sp=e.target.closest('[data-sprog]');
-  if(sp){ const i=Number(sp.dataset.sprog); editSubtasks[i].progress=parseInt(sp.value,10)||0; const lb=document.querySelector('[data-sprog-val="'+i+'"]'); if(lb) lb.textContent=editSubtasks[i].progress+' %'; progHintRefresh(); }
   toggleEstVisibility();
 });
 function addSubFromInputs(){
   const title=document.getElementById('subTitleInput').value.trim(), hrs=parseHours(document.getElementById('subHoursInput').value);
   if(!title) return false;
-  editSubtasks.push({id:uid(), title, estHours:hrs, startDate:null, dueDate:null, done:false, doneAt:null, timeSpentSec:0, timerRunning:false, timerLastTick:null, lastActivityAt:null, timeLog:{}, timeEvents:[]});
+  editSubtasks.push({id:uid(), title, estHours:hrs, done:false, doneAt:null, timeSpentSec:0, timerRunning:false, timerLastTick:null, lastActivityAt:null, timeLog:{}, timeEvents:[]});
   document.getElementById('subTitleInput').value=''; document.getElementById('subHoursInput').value='';
   return true;
 }
@@ -2986,7 +2776,7 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   // Timer oder wurde Zeit nachgetragen, würde die Kopie diese Zeit sonst wieder überschreiben.
   const liveSubs = new Map((old ? old.subtasks : []).map(s=>[s.id, s]));
   const newClient = document.getElementById('fClient').value.trim(), newStartDate = document.getElementById('fStartDate').value || null;
-  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, progress:(s.progress!=null?s.progress:null), startDate:s.startDate||null, dueDate:s.dueDate||null, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
+  const newDueDate = document.getElementById('fDueDate').value || null, newSubtasks = editSubtasks.filter(s=>s.title.trim()).map(s=>{ const live = liveSubs.get(s.id); if(!live) return s; const wasDone = !!live.done, nowDone = !!s.done; Object.assign(live, {title:s.title, estHours:s.estHours, done:nowDone, doneAt: nowDone ? (wasDone ? live.doneAt : (s.doneAt || Date.now())) : null}); if(nowDone) live.timerRunning = false; return live; });
   const recurFreq = document.getElementById('fRecurFreq').value;
   const newRecurrence = recurFreq ? {
     freq: recurFreq,
@@ -2999,9 +2789,6 @@ document.getElementById('btnSaveTask').addEventListener('click', async ()=>{
   const waitVal = document.querySelector('#fWaitInputs [data-wait-date]')?.value;
   const newWaitUntil = newManualStatus==='wartet_auf_info' ? (/^\d{4}-\d{2}-\d{2}$/.test(waitVal||'') ? waitVal : defaultWaitUntil()) : null;
   const data = { title, area:newArea, priority, estHours:newEst, subtasks:newSubtasks, manualStatus:newManualStatus, responsible:newResponsible, client:newClient, startDate:newStartDate, dueDate:newDueDate, recurrence:newRecurrence, tags:newTags, notes:editNotes.map(n=>Object.assign({}, n)) };
-  { const sl=document.getElementById('fProg'); const sg=progressSuggestion(editSubtasks);
-    if(sl.dataset.auto && sg){ data.progress=null; data.progressAt=null; if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'automatisch','automatisch'); }
-    else if(sl.dataset.touched){ data.progress=Math.max(0,Math.min(100,parseInt(sl.value,10)||0)); data.progressAt=new Date().toISOString(); if(old) logChange(old,'Fortschritt (Schätzung)',old.progress!=null?old.progress+' %':'–',data.progress+' %'); } }
   if(old){
     logChange(old, 'Titel', old.title, title);
     logChange(old, 'Bereich', areaById(old.area)?.name||'–', areaById(newArea)?.name||'–');
@@ -3198,7 +2985,6 @@ document.getElementById('btnOpenCal').addEventListener('click', ()=>openCalModal
 document.getElementById('btnCloseCal').addEventListener('click', ()=>document.getElementById('calModalBg').classList.remove('open'));
 document.getElementById('calModalBg').addEventListener('click', e=>{ if(e.target.id==='calModalBg') e.currentTarget.classList.remove('open'); });
 document.getElementById('ganttGrid').addEventListener('click', e=>{
-  const tg = e.target.closest('[data-gtoggle]'); if(tg){ const id=tg.dataset.gtoggle; if(ganttOpen.has(id)) ganttOpen.delete(id); else ganttOpen.add(id); renderGantt(); return; }
   const day = e.target.closest('[data-cal-day]'); if(day) openCalModal(day.dataset.calDay);
 });
 document.getElementById('apWeekly').addEventListener('change', e=>{ document.getElementById('apUntil').style.display = e.target.checked ? '' : 'none'; });
@@ -3379,12 +3165,12 @@ document.getElementById('backupList').addEventListener('click', async e=>{
     // Aktuellen Stand sichern, bevor er überschrieben wird - erst nach dem Laden der gewählten
     // Sicherung, damit der neue Snapshot sie nicht aus der 30er-Liste verdrängt.
     await writeBackupSnapshot(JSON.stringify(state), true);
-    try{ state = Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]}, JSON.parse(await inflateJson(b.data))); migrateState(); await saveAll(); renderAll(); alert('Sicherung wiederhergestellt.'); }
+    try{ state = Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]}, JSON.parse(b.data)); migrateState(); await saveAll(); renderAll(); alert('Sicherung wiederhergestellt.'); }
     catch(err){ alert('Diese Sicherung konnte nicht gelesen werden.'); }
   } else if(dl){
     const ts = Number(dl.dataset.dlBackup);
     const b = (await idbGetAll(IDB_BACKUP_STORE)).find(x=>x.ts===ts);
-    if(b){ const bd=new Date(ts); downloadText(exportFilename(`Sicherung_${pad(bd.getHours())}${pad(bd.getMinutes())}`,'json',bd), await inflateJson(b.data), 'application/json;charset=utf-8'); }
+    if(b){ const bd=new Date(ts); downloadText(exportFilename(`Sicherung_${pad(bd.getHours())}${pad(bd.getMinutes())}`,'json',bd), b.data, 'application/json;charset=utf-8'); }
   }
 });
 function renderAreasBlock(){
@@ -3454,7 +3240,7 @@ document.getElementById('btnExportExcel').addEventListener('click', ()=>{
     {Kennzahl:'Erledigt gesamt', Wert:realTasks.filter(t=>t.done).length},
     {Kennzahl:'Erstellt am', Wert:new Date().toLocaleString('de-DE')}
   ];
-  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Fortschritt (geschätzt, %)':t.done?100:(taskProgress(t)?taskProgress(t).pct:''),'Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
+  const rows = realTasks.slice().sort((a,b)=>(a.done?1:0)-(b.done?1:0)||(a.priorityOrder??0)-(b.priorityOrder??0)).map(t=>({Rang:t.done?'':(t.priorityOrder??0)+1,Titel:t.title,Bereich:areaById(t.area)?.name||'',Wichtigkeit:prioLabel(t.priority),Status:statusLabel(t),Verantwortlicher:t.responsible||'',Auftraggeber:t.client||'',Start:t.startDate?fmtDate(t.startDate):'',Tags:(t.tags||[]).join(', '),Zieldatum:t.dueDate?fmtDate(t.dueDate):'','Nachhaken am':(!t.done && t.manualStatus==='wartet_auf_info')?fmtDate(waitDueDate(t)):'','Geschätzt (Std.)':Math.round(taskEstHours(t)*100)/100,'Geleistet (Std.)':Math.round(taskSpentHours(t)*100)/100,'Restzeit (Std.)':t.done?0:Math.round(taskRemainingHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein',Notizen:(t.notes||[]).slice().sort((a,b)=>a.at.localeCompare(b.at)).map(n=>fmtDateTimeShort(n.at)+' '+n.text).join('\n')}));
   const subRows=[]; realTasks.forEach(t=>{ if(t.subtasks.length && (parseHours(t.estHours)>0 || entitySpentHours(t)>0)) subRows.push({Aufgabe:t.title,Unteraufgabe:'Allgemein','Geschätzt (Std.)':parseHours(t.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(t)*100)/100,Erledigt:t.done?'Ja':'Nein'}); t.subtasks.forEach(s=>subRows.push({Aufgabe:t.title,Unteraufgabe:s.title,'Geschätzt (Std.)':parseHours(s.estHours),'Geleistet (Std.)':Math.round(entitySpentHours(s)*100)/100,Erledigt:s.done?'Ja':'Nein'})); });
   const sourceLabel={timer:'Timer',manual:'Manuell',auto:'Auto'};
   const eventRows=[];
@@ -3561,50 +3347,23 @@ document.getElementById('btnImportJSON').addEventListener('click', ()=>document.
 document.getElementById('fileImport').addEventListener('change', async e=>{
   const file = e.target.files[0]; if(!file) return;
   try{ const data = JSON.parse(await file.text()); await importAnyData(data, file.name); }
-  catch(err){ console.error(err); alert('Die Datei konnte nicht gelesen werden ('+(err&&err.message?err.message:err)+'). Erwartet wird eine JSON-Datei der Aufgabenverwaltung (alt oder neu).'); }
+  catch(err){ console.error(err); alert('Die Datei konnte nicht gelesen werden. Erwartet wird eine JSON-Datei der Aufgabenverwaltung (alt oder neu).'); }
   e.target.value = '';
 });
 
-// Planung für eine Arbeitskraft: Es wird immer nur eine Einheit (Allgemein bzw. Unteraufgabe) bearbeitet,
-// und zwar die mit dem frühesten Zieltermin (Unteraufgabe ohne eigenen Termin: Termin der Aufgabe).
-// Gleiches Datum bzw. ohne Termin: manuelle Reihenfolge, Teile einer Aufgabe bleiben zusammen.
-// Eine Unteraufgabe wird nicht vor ihrem geplanten Start eingeplant.
 function buildSchedule(horizonDays=120){
-  const tasks=schedulableTasks(), NODUE='9999-12-31', remaining={}, units={}, prio={}, segments={}, unitSeg={}, dayCaps={};
-  tasks.forEach((t,i)=>{ prio[t.id]=i; remaining[t.id]=taskRemainingHours(t)*60; units[t.id]=taskUnits(t); segments[t.id]={}; unitSeg[t.id]={}; });
-  const now=new Date(), today=midnight(now), list=[];
-  for(let i=0;i<horizonDays;i++){ const day=new Date(today); day.setDate(today.getDate()+i); const ymd=toISODate(day); const cap=plannedCapacity(day); dayCaps[ymd]=cap; list.push({ymd,cap}); }
-  const wd=[]; let acc=0; list.forEach((x,i)=>{ if(x.cap>0) acc++; wd[i]=acc; });
-  const idxOf={}; list.forEach((x,i)=>idxOf[x.ymd]=i);
-  function workdaysFrom(i,due){ // verbleibende Arbeitstage ab Tag i bis einschließlich Frist (mind. 1)
-    if(!due || due>=list[list.length-1].ymd) return Math.max(1, wd[list.length-1]-(i>0?wd[i-1]:0));
-    let j=-1; for(let k=i;k<list.length;k++){ if(list[k].ymd<=due) j=k; else break; }
-    return j<i ? 1 : Math.max(1, wd[j]-(i>0?wd[i-1]:0));
+  const tasks=schedulableTasks(), remaining={}; tasks.forEach(t=>remaining[t.id]=taskRemainingHours(t)*60);
+  const segments={}, dayCaps={}; tasks.forEach(t=>segments[t.id]={});
+  const now=new Date(), today=midnight(now);
+  for(let i=0;i<horizonDays;i++){
+    const day=new Date(today); day.setDate(today.getDate()+i); const ymd=toISODate(day);
+    // Feiertage/Abwesenheiten = 0, feste Termine mindern die Kapazität (siehe plannedSegments).
+    const cap = plannedCapacity(day);
+    dayCaps[ymd]=cap; if(cap<=0) continue;
+    let left=cap, used=0;
+    for(const t of tasks){ if(left<=0) break; const use=Math.min(remaining[t.id],left); if(use>0){ segments[t.id][ymd]={offset:used,minutes:use}; used+=use; remaining[t.id]-=use; left-=use; } }
   }
-  const dueOf=(t,u)=>u.dueDate||t.dueDate||NODUE;
-  const taskDue=t=>{ let d=t.dueDate||NODUE; units[t.id].forEach(u=>{ if(u.dueDate && u.dueDate<d) d=u.dueDate; }); return d; };
-  list.forEach((dayInfo,di)=>{
-    const {ymd,cap}=dayInfo; if(cap<=0) return;
-    const cand=[];
-    tasks.forEach(t=>{
-      const el=units[t.id].filter(u=>u.rem>0 && !(u.startDate && ymd<u.startDate)); if(!el.length) return;
-      el.forEach(u=>cand.push({t,u,rank:dueOf(t,u),pr:prio[t.id],ix:u.idx}));
-    });
-    cand.sort((x,y)=> x.rank<y.rank?-1: x.rank>y.rank?1 : x.pr-y.pr || x.ix-y.ix);
-    let left=cap; const per={}, order=[];
-    const give=(t,u,m)=>{ if(m<=0) return 0; const x=Math.min(m,u.rem,left); if(x<=0) return 0; u.rem-=x; u.last=ymd; remaining[t.id]-=x; left-=x; if(!per[t.id]){ per[t.id]=new Map(); order.push(t); } per[t.id].set(u.key,(per[t.id].get(u.key)||0)+x); return x; };
-    for(const c of cand){ if(left<=0) break; give(c.t,c.u,c.u.rem); }
-    // Tagesbalken: Reihenfolge nach Rang, Unterzeilen mit eigenem Versatz.
-    const rankOf={}; cand.forEach((c,k)=>{ if(rankOf[c.t.id]==null) rankOf[c.t.id]=k; });
-    order.sort((x,y)=>rankOf[x.id]-rankOf[y.id]);
-    let used=0;
-    for(const t of order){ const m=per[t.id]; let tot=0, cum=used; m.forEach(v=>tot+=v);
-      segments[t.id][ymd]={offset:used,minutes:tot};
-      for(const u of units[t.id]){ const v=m.get(u.key); if(!v) continue; (unitSeg[t.id][u.key]=unitSeg[t.id][u.key]||{})[ymd]={offset:cum,minutes:v}; cum+=v; }
-      used+=tot; }
-  });
-  const unitInfo={}; tasks.forEach(t=>{ unitInfo[t.id]=units[t.id].map(u=>({key:u.key,title:u.title,startDate:u.startDate,dueDate:u.dueDate,last:u.last||null,complete:u.rem<=0.5})); });
-  return {tasks,segments,unitSeg,unitInfo,dayCaps};
+  return {tasks,segments,dayCaps};
 }
 function shiftDate(date, range, n){ const d=new Date(date); if(range==='week') d.setDate(d.getDate()+n*7); else d.setMonth(d.getMonth()+n); return d; }
 function shiftAnchor(dir){ ganttAnchor = shiftDate(ganttAnchor, ganttRange, dir); }
@@ -3645,7 +3404,6 @@ document.querySelectorAll('#view-gantt .seg-toggle button').forEach(b=>b.addEven
 document.getElementById('btnGanttPrev').addEventListener('click',()=>{ shiftAnchor(-1); renderGantt(); });
 document.getElementById('btnGanttNext').addEventListener('click',()=>{ shiftAnchor(1); renderGantt(); });
 document.getElementById('btnGanttToday').addEventListener('click',()=>{ ganttAnchor=new Date(); renderGantt(); });
-document.getElementById('chkSubs').addEventListener('change', e=>{ showSubs=e.target.checked; try{ localStorage.setItem('gantt-subs', showSubs?'1':'0'); }catch(_){} renderGantt(); });
 document.getElementById('chkPast').addEventListener('change', async e=>{ showPast=e.target.checked; state.settings.showPast=showPast; await saveSettings(); renderGantt(); });
 document.getElementById('chkOnlyWorkdays').addEventListener('change', async e=>{ showOnlyWorkdays=e.target.checked; state.settings.showOnlyWorkdays=showOnlyWorkdays; await saveSettings(); renderGantt(); });
 function renderGantt(){
@@ -3654,11 +3412,9 @@ function renderGantt(){
   // wirkte die Checkbox angehakt, ohne dass die Vergangenheit tatsächlich angezeigt wurde
   // (erst ein Aus-/wieder Anschalten hat den "change"-Handler ausgelöst und synchronisiert).
   // Hier wird die Checkbox bei jedem Render explizit auf den echten Zustand gesetzt.
-  try{ if(localStorage.getItem('gantt-subs')==='1') showSubs=true; }catch(_){}
-  document.getElementById('chkSubs').checked = showSubs;
   document.getElementById('chkPast').checked = showPast;
   document.getElementById('chkOnlyWorkdays').checked = showOnlyWorkdays;
-  const days=ganttVisibleDays(ganttRange,ganttAnchor,showPast), today=midnight(new Date()), {tasks:futureTasks,segments,dayCaps,unitSeg}=buildSchedule(Math.max(120,days.length+30));
+  const days=ganttVisibleDays(ganttRange,ganttAnchor,showPast), today=midnight(new Date()), {tasks:futureTasks,segments,dayCaps}=buildSchedule(Math.max(120,days.length+30));
   let rows=futureTasks.slice(), pastLayout={}, pastSessions={};
   const pastDays = showPast ? days.filter(d=>d<today) : [];
   // Heute-Zelle bildet den ganzen Arbeitstag ab: links grau der bereits verstrichene Teil (exakte
@@ -3787,7 +3543,7 @@ function renderGantt(){
     const barPrefix = icons.length ? icons.map(x=>x[0]).join('') + ' ' : '';
     const iconsHtml = icons.length ? `<span class="gantt-icons">${icons.map(([c,tip])=>`<span title="${escapeAttr(tip)}">${c}</span>`).join('')}</span>` : '';
     const grip = isDoneOnly || t.isQuickLog ? '' : `<span class="gantt-grip" data-grip="${t.id}" title="Ziehen zum Umsortieren (ändert die Prioritätsreihenfolge)">⠿</span>`;
-    html+=`<div class="gantt-row-label ${zebra}" data-row-label="${r}" data-task="${t.id}" title="${escapeAttr(t.title)}" style="${isDoneOnly?'color:var(--ink-faint);text-decoration:line-through;':''}">${grip}${(!t.done && (t.subtasks||[]).some(x=>!x.done)) ? `<span class="gantt-toggle" data-gtoggle="${t.id}" title="Unteraufgaben ein-/ausblenden">${(showSubs||ganttOpen.has(String(t.id)))?'▾':'▸'}</span>` : ''}${escapeHtml(t.title)}${iconsHtml}</div>`;
+    html+=`<div class="gantt-row-label ${zebra}" data-row-label="${r}" data-task="${t.id}" title="${escapeAttr(t.title)}" style="${isDoneOnly?'color:var(--ink-faint);text-decoration:line-through;':''}">${grip}${escapeHtml(t.title)}${iconsHtml}</div>`;
     // Pro Tag der Balken-Ausschnitt dieser Aufgabe, getrennt nach Art (hist = gebucht, plan =
     // geplant) - die Heute-Zelle kann beides nebeneinander enthalten.
     const histInfo = days.map(d=>{
@@ -3829,9 +3585,7 @@ function renderGantt(){
       if(dueIdx>=0 && dueIdx===days.length-1 && toISODate(days[dueIdx])!==t.dueDate) dueIdx=-1;
     }
     // Strich rot, wenn die Planung nach der Deadline endet (Balken laufen darüber hinaus), sonst ruhig orange.
-    const pfT = plannedFinish(t, {segments, dayCaps}), late = !!pfT?.late, subMarks = {};
-    (pfT?.subs||[]).forEach(u=>{ let k=-1; for(let i=0;i<days.length;i++){ if(toISODate(days[i])<=u.dueDate) k=i; else break; }
-      if(k>=0 && k===days.length-1 && toISODate(days[k])!==u.dueDate) k=-1; if(k>=0) (subMarks[k]=subMarks[k]||[]).push(u); });
+    const late = !!plannedFinish(t, {segments, dayCaps})?.late;
     days.forEach((d,i)=>{ const isPast=d<today, isToday=sameDay(d,today); let barHtml = isToday ? todayOverlay : '';
       layers.forEach(({info, joinPrev, joinNext, labelAt})=>{
         const b=info[i]; if(!b) return;
@@ -3841,28 +3595,9 @@ function renderGantt(){
         const leftCss = joinPrev[i] ? `calc(0% - ${bw}px)` : `${b.left}%`, widthCss = joinPrev[i] ? `calc(${b.width}% + ${bw}px)` : `${b.width}%`;
         barHtml+=`<div class="gantt-bar ${b.kind==='hist'?'hist':''} ${waiting&&b.kind==='plan'?'waiting':''} ${joinPrev[i]?'jl':''} ${joinNext[i]?'jr':''} ${b.kind==='plan' && !t.done && t.dueDate && toISODate(d)>t.dueDate ? 'late' : ''}" style="left:${leftCss};width:${widthCss};background-color:${color}" title="${escapeAttr(b.tip)}"></div>${labelAt[i]||''}`;
       });
-      if(subMarks[i]) subMarks[i].forEach(u=>{ barHtml+=`<div class="gantt-deadline sub ${u.late?'late':''}" title="${escapeAttr('Teilziel '+fmtDate(u.dueDate)+': '+u.title+(u.late?' - laut Planung nicht rechtzeitig fertig':''))}"></div>`; });
       if(i===dueIdx) barHtml+=`<div class="gantt-deadline ${late?'late':''}" title="Deadline ${fmtDate(t.dueDate)}${late?' - laut Planung nicht rechtzeitig fertig':''}"></div>`;
       html+=`<div class="gantt-cell ${isToday?'today':''} ${isPast&&!showPast?'past':''} ${isPast&&showPast?'pastday':''} ${zebra} ${colCls[i]}" data-cell="${r}:${i}" style="grid-column:${3+i};">${barHtml}</div>`;
     });
-    // Unterzeilen: Zeitfenster (Start bis Ziel) als Band, geplante Arbeit als Balken, Fortschritt im Namen.
-    if(!t.done && (showSubs || ganttOpen.has(String(t.id)))){
-      (t.subtasks||[]).filter(x=>!x.done).forEach(sub=>{
-        const estH=parseHours(sub.estHours), spH=entitySpentHours(sub), prog=estH>0?Math.min(100,Math.round(spH/estH*100)):0;
-        const info=(pfT?.subs||[]).find(u=>u.key===sub.id), segU=unitSeg?.[t.id]?.[sub.id]||{};
-        const subLate=!!info?.late;
-        html+=`<div class="gantt-row-label gantt-sub-label ${zebra}" title="${escapeAttr(sub.title+(estH>0?` - ${fmtHours(spH)} von ${fmtHours(estH)} (${prog} %)`:''))}" style="--prog:${prog}%;">↳ ${escapeHtml(sub.title)}${subLate?' <span title="laut Planung nicht rechtzeitig fertig">🔥</span>':''}</div>`;
-        days.forEach((d,i)=>{ const ymd=toISODate(d), isT=sameDay(d,today), isPast=d<today;
-          let inner='';
-          const inWin=(!sub.startDate||ymd>=sub.startDate)&&(!sub.dueDate||ymd<=sub.dueDate);
-          if((sub.startDate||sub.dueDate) && inWin) inner+=`<div class="gantt-window ${subLate?'late':''}" title="${escapeAttr('Zeitfenster '+(sub.startDate?fmtDate(sub.startDate):'…')+' bis '+(sub.dueDate?fmtDate(sub.dueDate):'…'))}"></div>`;
-          const sg=segU[ymd], cap=dayCaps[ymd]||0;
-          if(sg && cap>0 && !isPast){ const isTd=ymd===todayYmd&&todayFull>0, full=isTd?todayFull:cap, st=isTd?todayPlanStart:0;
-            inner+=`<div class="gantt-bar" style="left:${(st+sg.offset)/full*100}%;width:${Math.max(2,sg.minutes/full*100)}%;background-color:${color}" title="${escapeAttr(sub.title+': '+fmtHours(sg.minutes/60)+' geplant')}"></div>`; }
-          if(sub.dueDate && ymd===sub.dueDate) inner+=`<div class="gantt-deadline sub ${subLate?'late':''}" title="${escapeAttr('Teilziel '+fmtDate(sub.dueDate))}"></div>`;
-          html+=`<div class="gantt-cell gantt-sub-cell ${isT?'today':''} ${isPast&&!showPast?'past':''} ${zebra} ${colCls[i]}" style="grid-column:${3+i};">${inner}</div>`; });
-      });
-    }
   });
   // Übergänge: endet eine Aufgabe exakt dort, wo eine andere beginnt, verbindet ein senkrechter Streifen beide.
   ganttLinkDefs = [];
@@ -3996,12 +3731,33 @@ function entriesForDate(ymd){
   });
   return entries;
 }
+function groupedEntriesForDate(ymd){
+  // je Hauptaufgabe: Gesamtsumme (eigene Zeit + alle Unteraufgaben) und eingerückte Einzelzeilen
+  const groups = [];
+  state.tasks.forEach(t=>{
+    const own = (t.timeLog||{})[ymd] || 0;
+    const subs = [];
+    (t.subtasks||[]).forEach(s=>{ const sec=(s.timeLog||{})[ymd]||0; if(sec>0) subs.push({title:s.title, sec}); });
+    const total = own + subs.reduce((a,x)=>a+x.sec,0);
+    if(total>0) groups.push({task:t, area:areaById(t.area), own, subs, total});
+  });
+  return groups;
+}
 function renderHistory(){
   const days=getRangeDays(historyAnchor,historyRange).filter(d=>d<=new Date());
   document.getElementById('histRangeLabel').textContent = historyRange==='week' ? `${days[0].toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})} - ${days[days.length-1].toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}` : historyAnchor.toLocaleDateString('de-DE',{month:'long',year:'numeric'});
   let rangeTotalSec=0;
-  const cards=days.map(d=>{ const ymd=toISODate(d), entries=entriesForDate(ymd), daySec=entries.reduce((s,e)=>s+e.sec,0); rangeTotalSec+=daySec;
-    return `<div class="hist-day ${sameDay(d,new Date())?'today':''}"><div class="hist-day-head"><span>${d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'})}</span><span class="total">${fmtHMS(daySec)}</span></div>${entries.length?entries.map(e=>`<div class="hist-item"><span>${e.area?`<span class="legend-dot" style="background:${e.area.color}"></span>`:''}${escapeHtml(e.title)}</span><span class="font-mono">${fmtHMS(e.sec)}</span></div>`).join(''):'<div class="hist-empty">Keine erfasste Zeit</div>'}</div>`;
+  const cards=days.map(d=>{ const ymd=toISODate(d), groups=groupedEntriesForDate(ymd), daySec=groups.reduce((s,g)=>s+g.total,0); rangeTotalSec+=daySec;
+    const rows = groups.map(g=>{
+      const dot = g.area?`<span class="legend-dot" style="background:${g.area.color}"></span>`:'';
+      let h = `<div class="hist-item hist-main"><span>${dot}${escapeHtml(g.task.title)}</span><span class="font-mono">${fmtHMS(g.total)}</span></div>`;
+      if(g.subs.length){
+        if(g.own>0) h += `<div class="hist-item hist-sub"><span>direkt gebucht</span><span class="font-mono">${fmtHMS(g.own)}</span></div>`;
+        h += g.subs.map(x=>`<div class="hist-item hist-sub"><span>${escapeHtml(x.title)}</span><span class="font-mono">${fmtHMS(x.sec)}</span></div>`).join('');
+      }
+      return h;
+    }).join('');
+    return `<div class="hist-day ${sameDay(d,new Date())?'today':''}"><div class="hist-day-head"><span>${d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'})}</span><span class="total">${fmtHMS(daySec)}</span></div>${groups.length?rows:'<div class="hist-empty">Keine erfasste Zeit</div>'}</div>`;
   }).join('');
   document.getElementById('historyList').innerHTML=cards || '<div class="empty-state"><div class="em-title">Noch keine Daten</div>Sobald du den Timer nutzt, erscheint hier dein Verlauf.</div>';
   document.getElementById('histStats').innerHTML=`<div class="stat-card"><div class="num">${fmtHMS(rangeTotalSec)}</div><div class="label">Erfasste Zeit im Zeitraum</div></div>`;
@@ -4370,7 +4126,7 @@ window.addEventListener('resize', ()=>{ if(tourActive) positionTourStep(TOUR_STE
 function remindReference(t){ return Math.max(taskLastActivity(t), t.createdAt||0, t.remindedAt||0); }
 function holdCandidates(){
   const cutoff = workdayCountBack(new Date(), 4*weekWorkdays()), today = toISODate(new Date());
-  return sortedOpenTasks().filter(t=>!t.isQuickLog && computeStatus(t)!=='wartet_auf_info' && !(t.dueDate && t.dueDate>=today) && !(t.subtasks||[]).some(s=>!s.done && s.dueDate && s.dueDate>=today) && remindReference(t) < cutoff);
+  return sortedOpenTasks().filter(t=>!t.isQuickLog && computeStatus(t)!=='wartet_auf_info' && !(t.dueDate && t.dueDate>=today) && remindReference(t) < cutoff);
 }
 // Nachhak-Erinnerung für Aufgaben, die auf Info warten: ab ihrer Nachhak-Frist (waitUntil,
 // Standard eine Arbeitswoche nach Warte-Beginn bzw. letztem "Nachgehakt").
@@ -5227,11 +4983,6 @@ function nbFileToDataUrl(file, max=1800, q=.86){
 }
 function nbAddFiles(ed, files){ [...files].filter(f=>f.type.startsWith('image/')).forEach(async f=>{ try{ nbInsertImg(ed, await nbFileToDataUrl(f)); }catch(e){ alert('Bild konnte nicht gelesen werden.'); } }); }
 function nbPick(ed){ const i = document.createElement('input'); i.type='file'; i.accept='image/*'; i.multiple=true; i.onchange = ()=>nbAddFiles(ed, i.files); i.click(); }
-function nbStripColor(ed, props){ // Farbe/Markierung im Auswahlbereich entfernen (Standardfarbe des Designs gilt wieder)
-  const s=getSelection(); if(!s.rangeCount) return; const r=s.getRangeAt(0);
-  ed.querySelectorAll('[style]').forEach(el=>{ try{ if(!r.intersectsNode(el)) return; }catch(e){ return; } props.forEach(p=>el.style.removeProperty(p)); if(!el.getAttribute('style')) el.removeAttribute('style'); });
-  ed.querySelectorAll('font[color]').forEach(el=>{ try{ if(props.includes('color') && r.intersectsNode(el)) el.removeAttribute('color'); }catch(e){} });
-}
 function nbOpenEditor(host, note){
   if(nbEditing){ nbEditing.querySelector('.nb-edit').focus(); return; }
   const label = host.closest('.nb-sec').dataset.label;
@@ -5257,8 +5008,7 @@ function nbOpenEditor(host, note){
     const closePal = ()=>tb.querySelectorAll('.nb-pal').forEach(x=>x.remove());
     if(c){ nbFocusEd(ed); document.execCommand(c.dataset.c); return; }
     if(sw){ nbFocusEd(ed); document.execCommand('styleWithCSS', false, true); const v = sw.dataset.col;
-      if(v==='reset'){ nbStripColor(ed, sw.dataset.kind==='fore' ? ['color'] : ['background-color','color']); }
-      else if(sw.dataset.kind==='fore') document.execCommand('foreColor', false, v); else document.execCommand('hiliteColor', false, v);
+      if(sw.dataset.kind==='fore') document.execCommand('foreColor', false, v==='reset' ? getComputedStyle(ed).color : v); else document.execCommand('hiliteColor', false, v==='reset' ? 'transparent' : v);
       document.execCommand('styleWithCSS', false, false); closePal(); return; }
     if(act){ closePal(); if(act.dataset.ins==='photo') nbPick(ed); else nbSketch(src=>nbInsertImg(ed, src), null); return; }
     if(p){ const had = tb.querySelector('.nb-pal'); closePal(); if(had) return;
@@ -5439,195 +5189,7 @@ document.getElementById('nbSearch').addEventListener('input', async e=>{ await n
 document.getElementById('nbShowDone').addEventListener('change', async e=>{ await nbFinish(true); nbShowDone = e.target.checked; renderNotebook(); });
 
 
-// --- Google-Drive-Sync (Google Identity Services Token, App-Ordner "appDataFolder"; Abgleich pro Aufgabe/Bereich nach Zeitstempel) ---
-const GD_SCOPE='https://www.googleapis.com/auth/drive.appdata', GD_API='https://www.googleapis.com/drive/v3/files', GD_UP='https://www.googleapis.com/upload/drive/v3/files';
-let gdBusy=false, gdApplying=false, gdTimer=null, gdMsg='', gdWantAuth=false;
-const gdCid=()=>localStorage.getItem('gd-cid')||'';
-const gdAuth=()=>{ try{ return JSON.parse(localStorage.getItem('gd-auth')||'null'); }catch(e){ return null; } };
-const odNorm=o=>{ const c=Object.assign({},o); delete c.savedAt; return JSON.stringify(c); };
-function odMime(u8){ if(u8[0]===0xFF&&u8[1]===0xD8) return 'image/jpeg'; if(u8[0]===0x89&&u8[1]===0x50) return 'image/png'; if(u8[0]===0x47&&u8[1]===0x49) return 'image/gif'; if(u8[0]===0x52&&u8[1]===0x49) return 'image/webp'; return 'application/octet-stream'; }
-function noteHash(n){ return h53((n.html||'')+'|'+(n.text||'')); }
-function collectNoteHashes(d){ const m={}; for(const k of ['tasks','areas']) for(const e of (d[k]||[])) for(const n of (e.notes||[])) if(n&&n.id!=null) m[n.id]=noteHash(n); return m; }
-// Notizen per ID vereinen. Dreiwege-Abgleich gegen den Stand des letzten erfolgreichen Syncs (nb = {id:Hash}):
-// nur die Seite, die die Notiz seit dem verändert hat, setzt sich durch - unabhängig von Uhrzeiten. Haben beide
-// dieselbe Notiz verändert, gewinnt die zuletzt bearbeitete, die andere Fassung bleibt als "[Konflikt]"-Kopie erhalten.
-// Ohne Basis (erster Abgleich) gilt wie bisher: neuere Bearbeitung gewinnt; nur auf einer Seite vorhanden = behalten,
-// wenn nach dem letzten Abgleich entstanden.
-function odMergeNotes(a,b,base,nb){
-  const am=new Map((a||[]).map(n=>[n.id,n])), bm=new Map((b||[]).map(n=>[n.id,n])), out=[];
-  for(const id of new Set([...am.keys(),...bm.keys()])){ const x=am.get(id), y=bm.get(id), bh=nb?nb[id]:undefined;
-    if(x&&y){
-      const hx=noteHash(x), hy=noteHash(y);
-      if(hx===hy){ out.push((y.editedAt||'')>(x.editedAt||'')?y:x); continue; }
-      if(bh!==undefined && hx===bh){ out.push(y); continue; }
-      if(bh!==undefined && hy===bh){ out.push(x); continue; }
-      const win=(y.editedAt||y.at||'')>(x.editedAt||x.at||'')?y:x, lose=win===x?y:x;
-      out.push(win);
-      if(bh!==undefined) out.push(Object.assign({},lose,{id:lose.id+'~k'+noteHash(lose), text:'[Konflikt] '+(lose.text||''), html:'<p><i>Konfliktkopie - gleichzeitig auf einem anderen Gerät bearbeitet:</i></p>'+(lose.html||''), editedAt:null}));
-    } else {
-      const n=x||y;
-      if(bh!==undefined){ if(noteHash(n)!==bh) out.push(n); } // bekannt, fehlt auf der anderen Seite = dort gelöscht (außer hier seitdem geändert)
-      else if(nb || !(Date.parse(n.at)<=base)) out.push(n);
-    }
-  }
-  return out;
-}
-function odMergeEntity(k,id,le,ce,lm,cm,base,nb){
-  const lu=lm.upd[id]||0, cu=cm.upd[id]||0, lcu=(lm.cupd&&lm.cupd[id]!=null)?lm.cupd[id]:lu, ccu=(cm.cupd&&cm.cupd[id]!=null)?cm.cupd[id]:cu;
-  const content=ccu>lcu?ce:le, timer=cu>lu?ce:le, r=Object.assign({},content);
-  if(k==='tasks'){
-    SYNC_TK.forEach(f=>{ if(f in timer) r[f]=timer[f]; });
-    const tm=new Map((timer.subtasks||[]).map(s=>[s.id,s]));
-    if(Array.isArray(content.subtasks)) r.subtasks=content.subtasks.map(s=>{ const o=tm.get(s.id); if(!o) return s; const c=Object.assign({},s); SYNC_TK.forEach(f=>{ if(f in o) c[f]=o[f]; }); return c; });
-  }
-  if(Array.isArray(le.notes)||Array.isArray(ce.notes)) r.notes=odMergeNotes(le.notes,ce.notes,base,nb);
-  return {ent:r,upd:Math.max(lu,cu),cupd:Math.max(lcu,ccu)};
-}
-function odMerge(L,lm,C,cm,base,nb){
-  base=base||0;
-  const out=Object.assign({},(C.savedAt||0)>(L.savedAt||0)?C:L), meta={hv:2,upd:{},cupd:{},hash:{},chash:{},del:{}};
-  for(const k of ['tasks','areas','recurring']){
-    const lmap=new Map((L[k]||[]).map(e=>[k+':'+e.id,e])), cmap=new Map((C[k]||[]).map(e=>[k+':'+e.id,e])), res=[];
-    for(const id of new Set([...lmap.keys(),...cmap.keys()])){
-      const le=lmap.get(id), ce=cmap.get(id);
-      if(le&&ce){
-        let ent,upd,cupd;
-        if(JSON.stringify(le)===JSON.stringify(ce)){ ent=le; upd=Math.max(lm.upd[id]||0,cm.upd[id]||0)||Date.now(); cupd=Math.max((lm.cupd||{})[id]||0,(cm.cupd||{})[id]||0)||upd; }
-        else { const m=odMergeEntity(k,id,le,ce,lm,cm,base,nb); ent=m.ent; upd=m.upd||Date.now(); cupd=m.cupd||upd; }
-        res.push(ent); meta.upd[id]=upd; meta.cupd[id]=cupd; meta.hash[id]=entHash(ent); meta.chash[id]=k==='tasks'?entHash(syncStripT(ent)):meta.hash[id];
-        continue;
-      }
-      const lt=Math.max(lm.upd[id]||0,lm.del[id]||0), ct=Math.max(cm.upd[id]||0,cm.del[id]||0), c=ct>lt, src=c?cm:lm, ent=c?ce:le;
-      if(ent){ res.push(ent); meta.upd[id]=src.upd[id]||Date.now(); meta.cupd[id]=(src.cupd&&src.cupd[id]!=null)?src.cupd[id]:meta.upd[id]; meta.hash[id]=entHash(ent); meta.chash[id]=k==='tasks'?entHash(syncStripT(ent)):meta.hash[id]; } else meta.del[id]=src.del[id]||Date.now();
-    }
-    out[k]=res;
-  }
-  return {merged:out,meta};
-}
-function gdSet(m){ gdMsg=m||''; gdRender(); }
-function gdRender(){
-  const el=document.getElementById('gdStatus'); if(!el) return;
-  const a=gdAuth(), last=Number(localStorage.getItem('gd-last')||0), ok=a&&Date.now()<a.exp-60000;
-  document.getElementById('gdOrigin').textContent=location.origin;
-  el.textContent=(a?(ok?'Angemeldet. ':'Angemeldet, Anmeldung muss erneuert werden (einmal irgendwo tippen). '):'Nicht angemeldet. ')+(last?'Letzter Abgleich: '+fmtDateTime(last)+'. ':'')+gdMsg;
-}
-function gdLoadGis(){ return new Promise((res,rej)=>{
-  if(window.google&&google.accounts&&google.accounts.oauth2) return res();
-  const sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.onload=res; sc.onerror=()=>rej(new Error('Google-Anmeldung nicht erreichbar (offline?)')); document.head.appendChild(sc); }); }
-async function gdRequestToken(prompt){
-  await gdLoadGis();
-  return new Promise((res,rej)=>{
-    const tc=google.accounts.oauth2.initTokenClient({client_id:gdCid(),scope:GD_SCOPE,
-      callback:r=>{ if(r.error) return rej(new Error(r.error_description||r.error));
-        localStorage.setItem('gd-auth',JSON.stringify({at:r.access_token,exp:Date.now()+Number(r.expires_in)*1000})); res(r.access_token); },
-      error_callback:e=>rej(new Error('Anmeldung nicht möglich ('+((e&&(e.type||e.message))||'abgebrochen')+')'))});
-    tc.requestAccessToken({prompt});
-  });
-}
-async function gdLogin(){
-  const cid=document.getElementById('gdClientId').value.trim(); if(!cid){ alert('Bitte zuerst die Client-ID eintragen.'); return; }
-  localStorage.setItem('gd-cid',cid);
-  try{ await gdRequestToken('select_account'); gdSet(''); gdScheduleSync(500); }catch(e){ gdSet(e.message); }
-}
-async function gdToken(){
-  const a=gdAuth(); if(a&&Date.now()<a.exp-60000) return a.at;
-  gdWantAuth=true; throw new Error('Anmeldung abgelaufen – bitte einmal irgendwo tippen (oder „Mit Google anmelden").');
-}
-async function gdFetch(url,opt){ const t=await gdToken(); return fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+t},(opt||{}).headers||{})})); }
-async function gdOk(r){ if(r.ok) return r; const e=new Error('Google Drive '+r.status); e.code=r.status; if(r.status===401){ localStorage.setItem('gd-auth',JSON.stringify({at:'',exp:0})); gdWantAuth=true; } throw e; }
-async function gdList(){
-  const m=new Map(); let tok='';
-  do{ const r=await gdOk(await gdFetch(GD_API+'?spaces=appDataFolder&pageSize=1000&fields=nextPageToken,files(id,name,version)'+(tok?'&pageToken='+encodeURIComponent(tok):''))); const j=await r.json(); (j.files||[]).forEach(f=>m.set(f.name,f)); tok=j.nextPageToken||''; }while(tok);
-  return m;
-}
-async function gdGet(f){ return (await gdOk(await gdFetch(GD_API+'/'+f.id+'?alt=media'))).arrayBuffer(); }
-async function gdPut(name,blob,ex){
-  const type=blob.type||'application/octet-stream';
-  if(ex) return gdOk(await gdFetch(GD_UP+'/'+ex.id+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':type},body:blob}));
-  const bd='gdb'+Date.now(), body=new Blob(['--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name,parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: '+type+'\r\n\r\n',blob,'\r\n--'+bd+'--']);
-  return gdOk(await gdFetch(GD_UP+'?uploadType=multipart',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body}));
-}
-function gdBuild(){ try{ return APP_BUILD; }catch(e){ return 0; } }
-async function gdCheckNewBuild(){ // Läuft auf dem Gerät noch eine ältere Version (z. B. App lange im Hintergrund), wird erst neu geladen - sonst überschreibt der alte Stand die Daten
-  try{
-    const r=await fetch('index.html',{cache:'no-store'}); if(!r.ok) return false;
-    const m=(await r.text()).match(/const APP_BUILD=(\d+)/); const nb=m?Number(m[1]):0;
-    if(nb>gdBuild() && sessionStorage.getItem('gd-reload')!==String(nb)){ sessionStorage.setItem('gd-reload',String(nb)); await saveAll(); location.reload(); return true; }
-  }catch(e){}
-  return false;
-}
-async function gdSync(manual,retry){
-  if(gdBusy||!gdAuth()) return;
-  if(typeof nbEditing!=='undefined'&&nbEditing){ gdScheduleSync(6000); return; }
-  gdBusy=true; gdSet('Synchronisiere …'); const gdT0=Date.now();
-  try{
-    if(await gdCheckNewBuild()){ gdBusy=false; return; }
-    await saveAll();
-    const L=JSON.parse(await externalizeJson(JSON.stringify(state))), lm=JSON.parse(JSON.stringify(syncMeta||{upd:{},hash:{},del:{}}));
-    const files=await gdList(), cf=files.get('daten.json'); let C=null,cm=null,merged,meta;
-    if(cf){ const o=JSON.parse(new TextDecoder().decode(await gdGet(cf))); C=o.state; cm=o.meta; if((o.b||0)>gdBuild()) throw new Error('Auf Google Drive liegt der Stand einer neueren App-Version. Bitte unter Einstellungen „Neu laden“ drücken.'); }
-    if(!C){ merged=L; meta=lm; }
-    else if(!localStorage.getItem('gd-first')){
-      if(!confirm('In Google Drive liegen bereits Daten. Den lokalen Stand auf diesem Gerät durch den Google-Drive-Stand ersetzen?\n\nOK = Google Drive übernehmen (lokal wird vorher als Sicherung abgelegt)\nAbbrechen = nichts tun')) throw new Error('Abgebrochen.');
-      await writeBackupSnapshot(JSON.stringify(state),true); merged=C; meta=cm;
-    } else { let nb=null; try{ const r=await idbGet(IDB_STATE_STORE,'notebase'); nb=r?JSON.parse(r):null; }catch(_){} ({merged,meta}=odMerge(L,lm,C,cm,Number(localStorage.getItem('gd-base')||0),nb)); }
-    const ids=[...new Set([...JSON.stringify(merged).matchAll(TOK_RE)].map(m=>m[1]))];
-    for(const id of ids){
-      const loc=await idbGet(IDB_IMG_STORE,id), ex=files.get('img_'+id);
-      if(loc&&!ex) await gdPut('img_'+id,loc);
-      else if(!loc&&ex){ const buf=await gdGet(ex); await idbPut(IDB_IMG_STORE,new Blob([buf],{type:odMime(new Uint8Array(buf,0,4))}),id); knownImgs.add(id); }
-    }
-    if(odNorm(merged)!==odNorm(L)){
-      gdApplying=true;
-      try{
-        state=Object.assign({tasks:[],areas:defaultAreas(),settings:defaultSettings(),recurring:[]},JSON.parse(await inflateJson(JSON.stringify(merged))));
-        migrateState(); reconcileRunningTimers(); applyTheme(); syncMeta=meta; await idbPut(IDB_STATE_STORE,JSON.stringify(meta),'syncmeta'); await saveAll(); renderAll();
-      } finally { gdApplying=false; }
-    }
-    if(!C||JSON.stringify([odNorm(merged),meta.upd,meta.del])!==JSON.stringify([odNorm(C),cm.upd,cm.del])){
-      if(cf){ const v=(await (await gdOk(await gdFetch(GD_API+'/'+cf.id+'?fields=version'))).json()).version; if(v!==cf.version){ const e=new Error('Konflikt'); e.code=412; throw e; } }
-      await gdPut('daten.json',new Blob([JSON.stringify({v:1,b:gdBuild(),savedAt:Date.now(),state:merged,meta})],{type:'application/json'}),cf);
-    }
-    try{ await idbPut(IDB_STATE_STORE,JSON.stringify(collectNoteHashes(merged)),'notebase'); }catch(_){}
-    localStorage.setItem('gd-first','1'); localStorage.setItem('gd-base',String(gdT0)); localStorage.setItem('gd-last',String(Date.now())); gdBusy=false; gdSet('');
-  }catch(e){
-    gdBusy=false;
-    if(e.code===412&&!retry) return gdSync(manual,true);
-    gdSet('Fehler: '+(e.message||e));
-  }
-}
-function gdScheduleSync(ms){ if(!gdAuth()||gdApplying) return; clearTimeout(gdTimer); gdTimer=setTimeout(()=>gdSync(false),ms||5000); }
-async function gdInit(){
-  document.getElementById('gdClientId').value=gdCid();
-  document.getElementById('gdLogin').onclick=gdLogin;
-  document.getElementById('gdSyncNow').onclick=()=>{ if(!gdAuth()){ gdSet('Bitte zuerst anmelden.'); return; } gdSync(true); };
-  document.getElementById('gdLogout').onclick=()=>{ localStorage.removeItem('gd-auth'); localStorage.removeItem('gd-first'); localStorage.removeItem('gd-base'); gdSet('Abgemeldet.'); };
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gdScheduleSync(1500); });
-  document.addEventListener('pointerdown',()=>{ if(!gdWantAuth||!gdCid()) return; gdWantAuth=false; gdRequestToken('').then(()=>{ gdSet(''); gdScheduleSync(500); }).catch(e=>gdSet(e.message)); },true);
-  // regelmäßiger Abgleich (alle 5 Minuten), solange die App sichtbar und angemeldet ist
-  setInterval(()=>{
-    if(document.hidden||!gdAuth()||!gdCid()) return;
-    const a=gdAuth(); if(Date.now()>=a.exp-60000){ gdWantAuth=true; gdRender(); return; } // abgelaufen: nächstes Tippen erneuert
-    gdSync(false);
-  }, 5*60*1000);
-  gdRender(); gdScheduleSync(1500);
-}
 await loadState();
-try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
-gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=15, APP_DATE='29.10.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
-async function appVersionInit(){
-  const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
-  b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
-  let cache='kein Cache (Seite nicht installiert/online geöffnet)';
-  try{ const k=(await caches.keys()).filter(x=>x.startsWith('aufgaben-')); if(k.length) cache=k.join(', '); }catch(e){}
-  document.getElementById('verInfo').textContent='Geladen: Build '+APP_BUILD+' vom '+APP_DATE+'. Zwischenspeicher: '+cache+'. Stimmt die Build-Nummer nicht mit der erwarteten überein, unten neu laden.';
-  document.getElementById('verReload').onclick=async()=>{
-    try{ for(const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); for(const k of await caches.keys()) await caches.delete(k); }catch(e){}
-    location.reload();
-  };
-}
-appVersionInit();
 applyTheme();
 await initDataFile();
 document.getElementById('loading').style.display='none';
@@ -5640,10 +5202,6 @@ if(pendingTimerConfirm) showTimerConfirmModal();
 else { checkHoldPrompt(); checkWarnPrompt(); }
 
 })();
-</script>
-<script>
-if("serviceWorker" in navigator && location.protocol.indexOf("http")===0) window.addEventListener("load",function(){ navigator.serviceWorker.register("sw.js").catch(function(e){console.warn("SW",e);}); });
-try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 </script>
 </body>
 </html>
