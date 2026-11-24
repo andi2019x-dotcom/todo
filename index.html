@@ -5063,9 +5063,20 @@ async function dfConnectExisting(){
 async function dfResume(){
   if(!dfHandle) return;
   try{
-    if((await dfHandle.requestPermission({mode:'readwrite'})) !== 'granted') return;
-    dfPerm = 'granted'; await dfSync();
-  }catch(e){ dfError = String(e.message || e); }
+    const p = await dfHandle.requestPermission({mode:'readwrite'});
+    if(p !== 'granted'){ dfError = 'Freigabe nicht erteilt - bitte „Datei neu auswählen“ nutzen.'; renderDataFileUI(); renderDataBanners(); return; }
+    dfPerm = 'granted'; dfError = ''; await dfSync();
+  }catch(e){ dfError = 'Freigabe nicht möglich (' + (e.message || e) + ') - bitte „Datei neu auswählen“ nutzen.'; }
+  renderDataFileUI(); renderDataBanners();
+}
+async function dfRepick(){
+  // Ausweichweg: gleiche Datei erneut auswählen - die Auswahl selbst erteilt die Freigabe
+  if(!DF_SUPPORTED) return;
+  try{
+    const [h] = await window.showOpenFilePicker({types:[{description:'JSON-Datei', accept:{'application/json':['.json']}}], multiple:false});
+    try{ await h.requestPermission({mode:'readwrite'}); }catch(e){}
+    dfHandle = h; dfPerm = 'granted'; dfError = ''; await dfSaveHandle(h); await dfSync();
+  }catch(e){ if(e && e.name !== 'AbortError'){ dfError = 'Datei konnte nicht verbunden werden: ' + (e.message || e); } }
   renderDataFileUI(); renderDataBanners();
 }
 async function dfDisconnect(){
@@ -5104,7 +5115,7 @@ function renderDataFileUI(){
     if(!DF_SUPPORTED) body.innerHTML = '<div class="storage-note">Dein Browser unterstützt keine direkte Dateiverbindung. Nutze Chrome oder Edge – oder weiterhin „Sicherung exportieren (JSON)“ im Block Datenaustausch.</div>';
     else if(dfHandle){
       body.innerHTML = `<div class="storage-note">${dfPerm === 'granted' ? '● Verbunden mit' : '○ Wartet auf Freigabe:'} <b>${escapeHtml(dfHandle.name)}</b>${dfLast ? ' · zuletzt gespeichert ' + new Date(dfLast).toLocaleTimeString('de-DE') : ''}${dfError ? '<br><span style="color:var(--high);">' + escapeHtml(dfError) + '</span>' : ''}</div>
-        <div class="df-row">${dfPerm === 'granted' ? '<button class="btn small" data-df="save">Jetzt speichern</button>' : '<button class="btn small primary" data-df="resume">Verbindung fortsetzen</button>'}
+        <div class="df-row">${dfPerm === 'granted' ? '<button class="btn small" data-df="save">Jetzt speichern</button>' : '<button class="btn small primary" data-df="resume">Verbindung fortsetzen</button><button class="btn small" data-df="repick">Datei neu auswählen …</button>'}
         <button class="btn small" data-df="new">Andere Datei anlegen …</button><button class="btn small" data-df="disconnect">Trennen</button></div>`;
     } else {
       body.innerHTML = '<div class="storage-note">Noch keine Datendatei verbunden – die Daten liegen aktuell nur im Browser-Speicher.</div><div class="df-row"><button class="btn small primary" data-df="new">Neue Datendatei anlegen …</button><button class="btn small" data-df="open">Vorhandene Datendatei verbinden …</button></div>';
@@ -5115,7 +5126,7 @@ document.getElementById('dataFileBody').addEventListener('click', async e=>{
   const b = e.target.closest('[data-df]'); if(!b) return;
   const a = b.dataset.df;
   if(a === 'new') await dfConnectNew(); else if(a === 'open') await dfConnectExisting();
-  else if(a === 'resume') await dfResume(); else if(a === 'disconnect') await dfDisconnect();
+  else if(a === 'resume') await dfResume(); else if(a === 'repick') await dfRepick(); else if(a === 'disconnect') await dfDisconnect();
   else if(a === 'save'){ await writeDataFile(); renderDataFileUI(); }
 });
 // Hinweisleisten
@@ -5130,7 +5141,7 @@ function renderDataBanners(){
   if(db){
     let html = '';
     if(DF_SUPPORTED && dfHandle && dfPerm !== 'granted' && !dfBannerHidden){
-      html = `<span>Die Datendatei <b>${escapeHtml(dfHandle.name)}</b> braucht nach dem Start eine Freigabe.</span><button class="btn small primary" data-df-banner="resume">Fortsetzen</button><span class="miniBtn" data-df-banner="hide" title="Ausblenden">✕</span>`;
+      html = `<span>Die Datendatei <b>${escapeHtml(dfHandle.name)}</b> braucht nach dem Start eine Freigabe.</span><button class="btn small primary" data-df-banner="resume">Fortsetzen</button><button class="btn small" data-df-banner="repick">Datei neu auswählen</button><span class="miniBtn" data-df-banner="hide" title="Ausblenden">✕</span>`;
     } else if(DF_SUPPORTED && !dfHandle && !dfBannerHidden && (legacyJustImported || state.tasks.some(t=>!t.isQuickLog))){
       html = `<span>${legacyJustImported ? 'Daten übernommen – ' : ''}noch keine Datendatei verbunden. Jede Änderung automatisch in eine JSON-Datei speichern?</span><button class="btn small primary" data-df-banner="new">Neue Datendatei anlegen</button><span class="miniBtn" data-df-banner="hide" title="Für diese Sitzung ausblenden">✕</span>`;
     }
@@ -5144,7 +5155,7 @@ document.getElementById('legacyBanner').addEventListener('click', e=>{
 document.getElementById('dataFileBanner').addEventListener('click', async e=>{
   const b = e.target.closest('[data-df-banner]'); if(!b) return;
   const a = b.dataset.dfBanner;
-  if(a === 'hide'){ dfBannerHidden = true; renderDataBanners(); } else if(a === 'resume') await dfResume(); else if(a === 'new') await dfConnectNew();
+  if(a === 'hide'){ dfBannerHidden = true; renderDataBanners(); } else if(a === 'resume') await dfResume(); else if(a === 'repick') await dfRepick(); else if(a === 'new') await dfConnectNew();
 });
 
 // ===== NOTIZBUCH: Notizen je Bereich / Aufgabe / Unteraufgabe (Datum+Uhrzeit, Formatierung, Skizzen, Fotos) =====
@@ -5628,7 +5639,7 @@ async function gdInit(){
   document.getElementById('gdSyncNow').onclick=()=>{ if(!gdAuth()){ gdSet('Bitte zuerst anmelden.'); return; } gdSync(true); };
   document.getElementById('gdLogout').onclick=()=>{ localStorage.removeItem('gd-auth'); localStorage.removeItem('gd-first'); localStorage.removeItem('gd-base'); gdSet('Abgemeldet.'); };
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gdScheduleSync(1500); });
-  document.addEventListener('pointerdown',()=>{ if(!gdWantAuth||!gdCid()) return; gdWantAuth=false; gdRequestToken('').then(()=>{ gdSet(''); gdScheduleSync(500); }).catch(e=>gdSet(e.message)); },true);
+  document.addEventListener('pointerdown',ev=>{ if(ev.target && ev.target.closest && ev.target.closest('[data-df],[data-df-banner]')) return; if(!gdWantAuth||!gdCid()) return; gdWantAuth=false; gdRequestToken('').then(()=>{ gdSet(''); gdScheduleSync(500); }).catch(e=>gdSet(e.message)); },true);
   // regelmäßiger Abgleich (alle 5 Minuten), solange die App sichtbar und angemeldet ist
   setInterval(()=>{
     if(document.hidden||!gdAuth()||!gdCid()) return;
@@ -5640,7 +5651,7 @@ async function gdInit(){
 await loadState();
 try{ await saveAll(); }catch(e){} // einmalige Umstellung: vorhandene Bilder werden jetzt ausgelagert
 gdInit().catch(e=>console.warn('gdInit',e));
-const APP_BUILD=16, APP_DATE='24.11.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
+const APP_BUILD=17, APP_DATE='24.11.2026'; // bei jeder neuen Auslieferung hochzählen (und CACHE-Namen in sw.js angleichen)
 async function appVersionInit(){
   const b=document.createElement('div'); b.textContent='Build '+APP_BUILD+' · '+APP_DATE;
   b.style.cssText='position:fixed;top:2px;right:6px;font-size:10px;color:var(--ink-faint,#888);opacity:.75;pointer-events:none;z-index:5;'; document.body.appendChild(b);
